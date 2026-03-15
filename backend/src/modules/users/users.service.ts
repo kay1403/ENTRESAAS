@@ -100,3 +100,20 @@ export class UsersService {
     return user;
   }
 }
+
+  async getUserStatsByRole() {
+    const users = await this.prisma.user.groupBy({
+      by: ['roleId'],
+      _count: {
+        id: true,
+      },
+    });
+
+    const roles = await this.prisma.role.findMany();
+    
+    return users.map(stat => ({
+      roleId: stat.roleId,
+      roleName: roles.find(r => r.id === stat.roleId)?.name,
+      count: stat._count.id,
+    }));
+  }

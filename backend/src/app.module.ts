@@ -10,7 +10,8 @@ import { UsersModule } from './modules/users/users.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
-import { CommonModule } from './common/common.module';  // ← AJOUTER CETTE LIGNE
+import { CommonModule } from './common/common.module'; 
+import { ExportModule } from './modules/export/export.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RolesGuard } from './common/guards/roles.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -35,7 +36,8 @@ import { RedisConfig } from './config/redis.config';
     RolesModule,
     PermissionsModule,
     AuditLogModule,
-    CommonModule,  // ← AJOUTER CETTE LIGNE
+    CommonModule,
+    ExportModule,
   ],
   controllers: [AppController],
   providers: [
