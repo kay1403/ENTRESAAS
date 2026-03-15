@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto';
 import { CacheService } from '../../common/services/cache.service';
@@ -16,6 +16,7 @@ export class RolesService {
         name: dto.name, 
         permissions: { connect: dto.permissionIds.map(id => ({ id })) } 
       },
+      include: { permissions: true },
     });
     
     await this.cacheService.clearRolesCache();
@@ -29,6 +30,7 @@ export class RolesService {
         name: dto.name, 
         permissions: dto.permissionIds ? { set: dto.permissionIds.map(id => ({ id })) } : undefined 
       },
+      include: { permissions: true },
     });
     
     await this.cacheService.clearRolesCache();
@@ -37,7 +39,10 @@ export class RolesService {
   }
 
   async deleteRole(id: number) {
-    const role = await this.prisma.role.delete({ where: { id } });
+    const role = await this.prisma.role.delete({ 
+      where: { id } 
+    });
+    
     await this.cacheService.clearRolesCache();
     await this.cacheService.del(`roles:${id}`);
     return role;
@@ -60,7 +65,7 @@ export class RolesService {
   }
 
   async findOne(id: number) {
-    const cached = await this.cacheService.get(`roles:${id}`);
+    const cached = await this.cacheService.getRoleById(id);
     if (cached) {
       console.log(`📦 Rôle ${id} servi depuis le cache`);
       return cached;
@@ -72,10 +77,11 @@ export class RolesService {
       include: { permissions: true } 
     });
     
-    if (role) {
-      await this.cacheService.set(`roles:${id}`, role, 120);
+    if (!role) {
+      throw new NotFoundException(`Rôle avec ID ${id} non trouvé`);
     }
     
+    await this.cacheService.setRoleById(id, role);
     return role;
   }
 }

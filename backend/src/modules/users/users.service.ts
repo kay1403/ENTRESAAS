@@ -24,7 +24,6 @@ export class UsersService {
       },
     });
 
-    // Invalider le cache des users
     await this.cacheService.clearUsersCache();
     
     return user;
@@ -42,7 +41,6 @@ export class UsersService {
       data,
     });
 
-    // Invalider le cache
     await this.cacheService.clearUsersCache();
     await this.cacheService.del(`users:${id}`);
     
@@ -55,13 +53,11 @@ export class UsersService {
     
     await this.prisma.user.delete({ where: { id } });
     
-    // Invalider le cache
     await this.cacheService.clearUsersCache();
     await this.cacheService.del(`users:${id}`);
   }
 
   async findAll() {
-    // Vérifier le cache d'abord
     const cached = await this.cacheService.getUsers();
     if (cached) {
       console.log('📦 Données servies depuis le cache');
@@ -73,17 +69,15 @@ export class UsersService {
       select: { id: true, email: true, roleId: true, isActive: true },
     });
 
-    // Sauvegarder dans le cache
     await this.cacheService.setUsers(users);
     
     return users;
   }
 
   async findOne(id: number) {
-    // Vérifier le cache d'abord
     const cached = await this.cacheService.getUserById(id);
     if (cached) {
-      console.log(`📦 User ${id} servi depuis le cache`);
+      console.log(`�� User ${id} servi depuis le cache`);
       return cached;
     }
 
@@ -94,12 +88,10 @@ export class UsersService {
     
     if (!user) throw new NotFoundException('User not found');
     
-    // Sauvegarder dans le cache
     await this.cacheService.setUserById(id, user);
     
     return user;
   }
-}
 
   async getUserStatsByRole() {
     const users = await this.prisma.user.groupBy({
@@ -117,3 +109,4 @@ export class UsersService {
       count: stat._count.id,
     }));
   }
+}

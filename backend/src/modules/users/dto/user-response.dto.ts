@@ -1,4 +1,4 @@
-import { Exclude, Expose } from 'class-transformer';
+import { Exclude, Expose, Transform } from 'class-transformer';
 
 export class UserResponseDto {
   @Expose()
@@ -11,7 +11,7 @@ export class UserResponseDto {
   roleId: number;
 
   @Expose()
-  roleName: string;
+  roleName?: string;
 
   @Expose()
   isActive: boolean;
@@ -20,10 +20,16 @@ export class UserResponseDto {
   createdAt: Date;
 
   @Exclude()
-  password: string;
+  password?: string;
 
   @Exclude()
-  refreshToken: string;
+  refreshToken?: string;
+
+  @Exclude()
+  twoFactorSecret?: string;
+
+  @Exclude()
+  isTwoFactorEnabled?: boolean;
 
   constructor(partial: Partial<UserResponseDto>) {
     Object.assign(this, partial);

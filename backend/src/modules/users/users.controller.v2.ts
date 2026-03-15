@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -7,7 +7,6 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { CacheTTL } from '../../common/decorators/cache-ttl.decorator';
 
 @Controller({
   path: 'users',
@@ -19,25 +18,36 @@ export class UsersControllerV2 {
 
   @Get()
   @Roles('ADMIN')
-  @CacheTTL(30) // Cache 30 secondes
   async findAll(@Query() pagination: PaginationDto) {
     const users = await this.service.findAll();
     
-    // Appliquer pagination
-    const start = (pagination.page - 1) * pagination.limit;
-    const end = start + pagination.limit;
+    const page = pagination.page || 1;
+    const limit = pagination.limit || 10;
+    
+    const start = (page - 1) * limit;
+    const end = start + limit;
     const paginatedUsers = users.slice(start, end);
     
-    // Transformer en DTO de réponse
-    const usersResponse = paginatedUsers.map(user => new UserResponseDto(user));
+    // Récupérer les rôles pour avoir les noms
+    const roles = await this.prisma.role.findMany();
     
     return {
-      data: usersResponse,
+      data: paginatedUsers.map(user => {
+        const role = roles.find(r => r.id === user.roleId);
+        return new UserResponseDto({
+          id: user.id,
+          email: user.email,
+          roleId: user.roleId,
+          roleName: role?.name,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+        });
+      }),
       meta: {
-        page: pagination.page,
-        limit: pagination.limit,
+        page,
+        limit,
         total: users.length,
-        totalPages: Math.ceil(users.length / pagination.limit),
+        totalPages: Math.ceil(users.length / limit),
       },
     };
   }
@@ -46,12 +56,13 @@ export class UsersControllerV2 {
   @Roles('ADMIN')
   async getStats() {
     const users = await this.service.findAll();
+    const statsByRole = await this.service.getUserStatsByRole();
     
     return {
       total: users.length,
       active: users.filter(u => u.isActive).length,
       inactive: users.filter(u => !u.isActive).length,
-      byRole: await this.service.getUserStatsByRole(),
+      byRole: statsByRole,
     };
   }
 
@@ -59,26 +70,73 @@ export class UsersControllerV2 {
   @Roles('ADMIN')
   async findOne(@Param('id') id: string) {
     const user = await this.service.findOne(+id);
-    return new UserResponseDto(user);
+    if (!user) {
+      throw new NotFoundException(`Utilisateur avec ID ${id} non trouvé`);
+    }
+    
+    // Récupérer le rôle pour avoir le nom
+    const role = await this.prisma.role.findUnique({
+      where: { id: user.roleId }
+    });
+    
+    return new UserResponseDto({
+      id: user.id,
+      email: user.email,
+      roleId: user.roleId,
+      roleName: role?.name,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    });
   }
 
   @Post()
   @Roles('ADMIN')
   async create(@Body() dto: CreateUserDto) {
     const user = await this.service.createUser(dto);
-    return new UserResponseDto(user);
+    
+    // Récupérer le rôle pour avoir le nom
+    const role = await this.prisma.role.findUnique({
+      where: { id: user.roleId }
+    });
+    
+    return new UserResponseDto({
+      id: user.id,
+      email: user.email,
+      roleId: user.roleId,
+      roleName: role?.name,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    });
   }
 
   @Patch(':id')
   @Roles('ADMIN')
   async update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     const user = await this.service.updateUser(+id, dto);
-    return new UserResponseDto(user);
+    
+    // Récupérer le rôle pour avoir le nom
+    const role = await this.prisma.role.findUnique({
+      where: { id: user.roleId }
+    });
+    
+    return new UserResponseDto({
+      id: user.id,
+      email: user.email,
+      roleId: user.roleId,
+      roleName: role?.name,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    });
   }
 
   @Delete(':id')
   @Roles('ADMIN')
   remove(@Param('id') id: string) {
     return this.service.deleteUser(+id);
+  }
+
+  // Ajouter une référence à PrismaService
+  private get prisma() {
+    return (this.service as any).prisma;
   }
 }

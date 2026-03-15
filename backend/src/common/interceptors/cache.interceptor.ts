@@ -2,8 +2,8 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Inject } fr
 import { Observable, of } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import { Reflector } from '@nestjs/core';
+import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class CustomCacheInterceptor implements NestInterceptor {
@@ -28,7 +28,9 @@ export class CustomCacheInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(response => {
-        this.cacheManager.set(key, response, ttl);
+        if (response) {
+          this.cacheManager.set(key, response, ttl);
+        }
       }),
     );
   }
@@ -37,7 +39,6 @@ export class CustomCacheInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const { method, url, user } = request;
     
-    // Clé de cache basée sur l'utilisateur et l'URL
     if (user?.userId) {
       return `cache:${user.userId}:${method}:${url}`;
     }

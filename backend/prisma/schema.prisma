@@ -19,6 +19,8 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   auditLogs    AuditLog[]
+  twoFactorSecret    String?   // Secret pour 2FA
+  isTwoFactorEnabled Boolean   @default(false)
 }
 
 model Role {

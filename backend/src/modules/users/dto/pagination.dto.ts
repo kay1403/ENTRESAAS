@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class PaginationDto {
@@ -16,11 +16,14 @@ export class PaginationDto {
   limit?: number = 10;
 
   @IsOptional()
+  @IsString()
   sortBy?: string = 'id';
 
   @IsOptional()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'asc';
 
   @IsOptional()
+  @IsString()
   search?: string;
 }
