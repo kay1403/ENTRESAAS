@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { CacheModule } from '@nestjs/cache-manager';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -9,12 +10,14 @@ import { UsersModule } from './modules/users/users.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { CommonModule } from './common/common.module';  // ← AJOUTER CETTE LIGNE
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RolesGuard } from './common/guards/roles.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { ValidationPipe } from './common/pipes/validation.pipe';
 import { AuditInterceptor } from './modules/audit-log/interceptors/audit.interceptor';
 import { validate } from './config/env.validation';
+import { RedisConfig } from './config/redis.config';
 
 @Module({
   imports: [
@@ -22,12 +25,17 @@ import { validate } from './config/env.validation';
       validate,
       isGlobal: true,
     }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useClass: RedisConfig,
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
     RolesModule,
     PermissionsModule,
     AuditLogModule,
+    CommonModule,  // ← AJOUTER CETTE LIGNE
   ],
   controllers: [AppController],
   providers: [

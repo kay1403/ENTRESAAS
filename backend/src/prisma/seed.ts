@@ -1,9 +1,12 @@
+// src/prisma/seed.ts
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
+  console.log('🌱 Seeding database...');
+
   // Create permissions
   const permissions = await Promise.all([
     prisma.permission.upsert({
@@ -28,10 +31,16 @@ async function main() {
     }),
   ]);
 
+  console.log('✅ Permissions created');
+
   // Create admin role with all permissions
   const adminRole = await prisma.role.upsert({
     where: { name: 'ADMIN' },
-    update: {},
+    update: {
+      permissions: {
+        set: permissions.map(p => ({ id: p.id })),
+      },
+    },
     create: {
       name: 'ADMIN',
       permissions: {
@@ -43,7 +52,13 @@ async function main() {
   // Create user role with read permissions
   const userRole = await prisma.role.upsert({
     where: { name: 'USER' },
-    update: {},
+    update: {
+      permissions: {
+        set: permissions
+          .filter(p => p.name.includes('read'))
+          .map(p => ({ id: p.id })),
+      },
+    },
     create: {
       name: 'USER',
       permissions: {
@@ -54,11 +69,15 @@ async function main() {
     },
   });
 
+  console.log('✅ Roles created');
+
   // Create admin user
   const adminPassword = await bcrypt.hash('Admin123!', 10);
-  await prisma.user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
+    update: {
+      roleId: adminRole.id,
+    },
     create: {
       email: 'admin@example.com',
       password: adminPassword,
@@ -67,13 +86,14 @@ async function main() {
     },
   });
 
-  console.log('Database seeded successfully!');
-  console.log('Admin credentials: admin@example.com / Admin123!');
+  console.log('✅ Admin user created');
+  console.log('\n📊 Database seeded successfully!');
+  console.log('👤 Admin credentials: admin@example.com / Admin123!');
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error('❌ Seeding failed:', e);
     process.exit(1);
   })
   .finally(async () => {
