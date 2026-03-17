@@ -51,6 +51,18 @@ export interface Permission {
   createdAt: string;
 }
 
+export interface AuditLog {
+  id: number;
+  action: string;
+  userId: number;
+  user?: {
+    email: string;
+  };
+  ip: string;
+  payload: any;
+  createdAt: string;
+}
+
 class ApiService {
   private accessToken: string | null = null;
   private _refreshToken: string | null = null;
@@ -264,6 +276,13 @@ class ApiService {
     return this.handleResponse<UserStats>(response);
   }
 
+  async getUserById(id: number) {
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<User>(response);
+  }
+
   async createUser(userData: any) {
     const response = await fetch(`${API_BASE_URL}/users`, {
       method: 'POST',
@@ -299,6 +318,13 @@ class ApiService {
     return this.handleResponse<Role[]>(response);
   }
 
+  async getRoleById(id: number) {
+    const response = await fetch(`${API_BASE_URL}/roles/${id}`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Role>(response);
+  }
+
   async createRole(name: string, permissionIds: number[]) {
     const response = await fetch(`${API_BASE_URL}/roles`, {
       method: 'POST',
@@ -325,11 +351,62 @@ class ApiService {
     return this.handleResponse<{ message: string }>(response);
   }
 
+  // ==================== PERMISSIONS ENDPOINTS ====================
+
   async getPermissions() {
     const response = await fetch(`${API_BASE_URL}/permissions`, {
       headers: this.getHeaders(),
     });
     return this.handleResponse<Permission[]>(response);
+  }
+
+  async getPermissionById(id: number) {
+    const response = await fetch(`${API_BASE_URL}/permissions/${id}`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Permission>(response);
+  }
+
+  async createPermission(name: string) {
+    const response = await fetch(`${API_BASE_URL}/permissions`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ name }),
+    });
+    return this.handleResponse<Permission>(response);
+  }
+
+  async updatePermission(id: number, name: string) {
+    const response = await fetch(`${API_BASE_URL}/permissions/${id}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ name }),
+    });
+    return this.handleResponse<Permission>(response);
+  }
+
+  async deletePermission(id: number) {
+    const response = await fetch(`${API_BASE_URL}/permissions/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
+  // ==================== AUDIT LOGS ENDPOINTS ====================
+
+  async getAuditLogs() {
+    const response = await fetch(`${API_BASE_URL}/audit-log`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<AuditLog[]>(response);
+  }
+
+  async getAuditLogById(id: number) {
+    const response = await fetch(`${API_BASE_URL}/audit-log/${id}`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<AuditLog>(response);
   }
 
   // ==================== EXPORT ENDPOINTS ====================
@@ -344,6 +421,34 @@ class ApiService {
     const a = document.createElement('a');
     a.href = url;
     a.download = `users.${format}`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  async exportRoles(format: 'excel' | 'pdf' | 'csv' = 'excel') {
+    const response = await fetch(`${API_BASE_URL}/export/roles/${format}`, {
+      headers: this.getHeaders(),
+    });
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `roles.${format}`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  async exportAuditLogs(format: 'excel' | 'pdf' | 'csv' = 'excel') {
+    const response = await fetch(`${API_BASE_URL}/export/audit-logs/${format}`, {
+      headers: this.getHeaders(),
+    });
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-logs.${format}`;
     a.click();
     window.URL.revokeObjectURL(url);
   }

@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export default function proxy(request: NextRequest) {
+export default function middleware(request: NextRequest) {
   const token = request.cookies.get('accessToken')?.value;
   const { pathname } = request.nextUrl;
 
   // Routes publiques
   const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+
+  // Routes admin uniquement
+  const adminRoutes = ['/users', '/roles', '/permissions', '/audit-logs'];
+  const isAdminRoute = adminRoutes.some(route => pathname.startsWith(route));
 
   // Si c'est la racine, rediriger vers dashboard ou login
   if (pathname === '/') {
@@ -23,6 +27,9 @@ export default function proxy(request: NextRequest) {
   if (isPublicRoute && token && pathname !== '/') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
+
+  // Pour les routes admin, on vérifie le rôle dans le token (via API)
+  // Mais on laisse le backend gérer l'autorisation
 
   return NextResponse.next();
 }

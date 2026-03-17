@@ -16,11 +16,35 @@ const config: Config = {
           300: '#93c5fd',
           400: '#60a5fa',
           500: '#3b82f6',
-          600: '#2563eb',
+          600: '#2563eb',   // Plus foncé pour meilleur contraste
           700: '#1d4ed8',
           800: '#1e40af',
           900: '#1e3a8a',
         },
+        gray: {
+          50: '#f9fafb',
+          100: '#f3f4f6',
+          200: '#e5e7eb',
+          300: '#d1d5db',
+          400: '#9ca3af',
+          500: '#6b7280',
+          600: '#4b5563',   // Pour texte sur fond clair
+          700: '#374151',
+          800: '#1f2937',
+          900: '#111827',    // Texte principal
+        },
+      },
+      textColor: {
+        DEFAULT: '#111827',  // Texte par défaut plus foncé
+        muted: '#4b5563',    // Texte secondaire lisible
+      },
+      backgroundColor: {
+        DEFAULT: '#ffffff',
+        muted: '#f9fafb',    // Fond des sections secondaires
+        card: '#ffffff',      // Fond des cartes
+      },
+      borderColor: {
+        DEFAULT: '#e5e7eb',   // Bordures par défaut
       },
     },
   },
