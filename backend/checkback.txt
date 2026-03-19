@@ -1,0 +1,2594 @@
+=== PACKAGE.JSON ===
+{
+  "name": "backend",
+  "version": "0.0.1",
+  "description": "",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "ts-node src/prisma/seed.ts",
+    "db:setup": "prisma migrate dev --name init && npm run prisma:seed"
+  },
+  "dependencies": {
+    "@nestjs/cache-manager": "^3.1.0",
+    "@nestjs/common": "^10.4.22",
+    "@nestjs/config": "^3.3.0",
+    "@nestjs/core": "^10.4.22",
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/passport": "^10.0.3",
+    "@nestjs/platform-express": "^10.4.22",
+    "@nestjs/throttler": "^6.5.0",
+    "@prisma/client": "^5.22.0",
+    "bcrypt": "^5.1.1",
+    "cache-manager": "^7.2.8",
+    "cache-manager-redis-store": "^3.0.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "passport": "^0.6.0",
+    "passport-jwt": "^4.0.1",
+    "pdfkit": "^0.18.0",
+    "qrcode": "^1.5.4",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.0",
+    "speakeasy": "^2.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.0.0",
+    "@nestjs/schematics": "^10.0.0",
+    "@nestjs/testing": "^10.0.0",
+    "@types/bcrypt": "^5.0.2",
+    "@types/cache-manager-redis-store": "^2.0.4",
+    "@types/express": "^4.17.25",
+    "@types/jest": "^29.5.2",
+    "@types/node": "^20.19.37",
+    "@types/passport-jwt": "^3.0.13",
+    "@types/pdfkit": "^0.17.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/speakeasy": "^2.0.10",
+    "@types/supertest": "^2.0.12",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.42.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "jest": "^29.5.0",
+    "prettier": "^3.0.0",
+    "prisma": "^5.22.0",
+    "source-map-support": "^0.5.21",
+    "supertest": "^6.3.3",
+    "ts-jest": "^29.1.0",
+    "ts-loader": "^9.4.3",
+    "ts-node": "^10.9.1",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.3"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node"
+  }
+}
+
+=== PRISMA SCHEMA ===
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique
+  password     String
+  refreshToken String?
+  roleId       Int
+  role         Role       @relation(fields: [roleId], references: [id])
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+  twoFactorSecret    String?   // Secret pour 2FA
+  isTwoFactorEnabled Boolean   @default(false)
+}
+
+model Role {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  users       User[]
+  permissions Permission[] @relation("RolePermissions")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Permission {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  roles       Role[]       @relation("RolePermissions")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  ip        String?
+  payload   Json?
+  createdAt DateTime @default(now())
+}
+=== BACKEND SOURCE CODE (SRC) ===
+-e \n--- FILE: src/main.ts ---
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  
+  // Global prefix
+  app.setGlobalPrefix('api');
+  
+  // Activer le versioning de l'API - SANS PREFIX
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1', // Routes: /api/v1/auth/login
+  });
+  
+  // Global validation pipe
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }));
+  
+  // Enable CORS
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    credentials: true,
+  });
+  
+  const configService = app.get(ConfigService);
+  const port = configService.get('PORT', 3001);
+  
+  await app.listen(port);
+  console.log(`Application is running on: http://localhost:${port}/api`);
+  console.log(`API v1: http://localhost:${port}/api/v1`);
+  console.log(`API v2: http://localhost:${port}/api/v2`);
+}
+
+bootstrap();
+-e \n--- FILE: src/config/redis.config.ts ---
+import { CacheModuleOptions, CacheOptionsFactory } from '@nestjs/cache-manager';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as redisStore from 'cache-manager-redis-store';
+
+@Injectable()
+export class RedisConfig implements CacheOptionsFactory {
+  constructor(private configService: ConfigService) {}
+
+  createCacheOptions(): CacheModuleOptions {
+    const redisHost = this.configService.get('REDIS_HOST', 'localhost');
+    const redisPort = this.configService.get('REDIS_PORT', '6379');
+    
+    return {
+      store: redisStore,
+      host: redisHost,
+      port: parseInt(redisPort, 10),
+      ttl: 60, // 60 secondes par défaut
+      max: 100, // maximum 100 items en cache
+      isGlobal: true,
+    };
+  }
+}
+-e \n--- FILE: src/config/env.validation.ts ---
+import { IsString, IsNumber, IsOptional } from 'class-validator';
+
+export class EnvironmentVariables {
+  @IsNumber()
+  @IsOptional()
+  PORT = 3000;
+
+  @IsString()
+  DATABASE_URL: string;
+
+  @IsString()
+  JWT_SECRET: string;
+
+  @IsString()
+  JWT_REFRESH_SECRET: string;
+}
+
+export function validate(config: Record<string, unknown>) {
+  const validatedConfig = new EnvironmentVariables();
+  Object.assign(validatedConfig, config);
+  return validatedConfig;
+}-e \n--- FILE: src/app.service.ts ---
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class AppService {
+  getHello(): string {
+    return 'Hello World!';
+  }
+}
+-e \n--- FILE: src/prisma/seed.ts ---
+// src/prisma/seed.ts
+import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('🌱 Seeding database...');
+
+  // Create permissions
+  const permissions = await Promise.all([
+    prisma.permission.upsert({
+      where: { name: 'users:read' },
+      update: {},
+      create: { name: 'users:read' },
+    }),
+    prisma.permission.upsert({
+      where: { name: 'users:write' },
+      update: {},
+      create: { name: 'users:write' },
+    }),
+    prisma.permission.upsert({
+      where: { name: 'users:delete' },
+      update: {},
+      create: { name: 'users:delete' },
+    }),
+    prisma.permission.upsert({
+      where: { name: 'roles:read' },
+      update: {},
+      create: { name: 'roles:read' },
+    }),
+    prisma.permission.upsert({
+      where: { name: 'roles:write' },
+      update: {},
+      create: { name: 'roles:write' },
+    }),
+    prisma.permission.upsert({
+      where: { name: 'permissions:read' },
+      update: {},
+      create: { name: 'permissions:read' },
+    }),
+    prisma.permission.upsert({
+      where: { name: 'audit:read' },
+      update: {},
+      create: { name: 'audit:read' },
+    }),
+    prisma.permission.upsert({
+      where: { name: 'export:data' },
+      update: {},
+      create: { name: 'export:data' },
+    }),
+  ]);
+
+  console.log('✅ Permissions created');
+
+  // Create admin role with all permissions
+  const adminRole = await prisma.role.upsert({
+    where: { name: 'ADMIN' },
+    update: {
+      permissions: {
+        set: permissions.map(p => ({ id: p.id })),
+      },
+    },
+    create: {
+      name: 'ADMIN',
+      permissions: {
+        connect: permissions.map(p => ({ id: p.id })),
+      },
+    },
+  });
+
+  // Create manager role with limited permissions
+  const managerRole = await prisma.role.upsert({
+    where: { name: 'MANAGER' },
+    update: {
+      permissions: {
+        set: permissions
+          .filter(p => 
+            p.name.includes('read') || 
+            p.name === 'users:write' ||
+            p.name === 'export:data'
+          )
+          .map(p => ({ id: p.id })),
+      },
+    },
+    create: {
+      name: 'MANAGER',
+      permissions: {
+        connect: permissions
+          .filter(p => 
+            p.name.includes('read') || 
+            p.name === 'users:write' ||
+            p.name === 'export:data'
+          )
+          .map(p => ({ id: p.id })),
+      },
+    },
+  });
+
+  // Create user role with basic permissions
+  const userRole = await prisma.role.upsert({
+    where: { name: 'USER' },
+    update: {
+      permissions: {
+        set: permissions
+          .filter(p => p.name.includes('read'))
+          .map(p => ({ id: p.id })),
+      },
+    },
+    create: {
+      name: 'USER',
+      permissions: {
+        connect: permissions
+          .filter(p => p.name.includes('read'))
+          .map(p => ({ id: p.id })),
+      },
+    },
+  });
+
+  console.log('✅ Roles created');
+
+  // Create admin user
+  const adminPassword = await bcrypt.hash('Admin123!', 10);
+  await prisma.user.upsert({
+    where: { email: 'admin@example.com' },
+    update: {
+      roleId: adminRole.id,
+    },
+    create: {
+      email: 'admin@example.com',
+      password: adminPassword,
+      roleId: adminRole.id,
+      isActive: true,
+    },
+  });
+
+  // Create manager user
+  const managerPassword = await bcrypt.hash('Manager123!', 10);
+  await prisma.user.upsert({
+    where: { email: 'manager@example.com' },
+    update: {
+      roleId: managerRole.id,
+    },
+    create: {
+      email: 'manager@example.com',
+      password: managerPassword,
+      roleId: managerRole.id,
+      isActive: true,
+    },
+  });
+
+  // Create regular user
+  const userPassword = await bcrypt.hash('User123!', 10);
+  await prisma.user.upsert({
+    where: { email: 'user@example.com' },
+    update: {
+      roleId: userRole.id,
+    },
+    create: {
+      email: 'user@example.com',
+      password: userPassword,
+      roleId: userRole.id,
+      isActive: true,
+    },
+  });
+
+  console.log('✅ Users created');
+  console.log('\n�� Database seeded successfully!');
+  console.log('👑 Admin: admin@example.com / Admin123!');
+  console.log('👔 Manager: manager@example.com / Manager123!');
+  console.log('👤 User: user@example.com / User123!');
+}
+
+main()
+  .catch((e) => {
+    console.error('❌ Seeding failed:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
+-e \n--- FILE: src/prisma/prisma.service.ts ---
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  async onModuleInit() {
+    await this.$connect();
+  }
+
+  async onModuleDestroy() {
+    await this.$disconnect();
+  }
+}-e \n--- FILE: src/prisma/prisma.module.ts ---
+import { Global, Module } from '@nestjs/common';
+import { PrismaService } from './prisma.service';
+
+@Global()
+@Module({
+  providers: [PrismaService],
+  exports: [PrismaService],
+})
+export class PrismaModule {}
+-e \n--- FILE: src/app.module.ts ---
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { CacheModule } from '@nestjs/cache-manager';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
+import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { CommonModule } from './common/common.module'; 
+import { ExportModule } from './modules/export/export.module';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { RolesGuard } from './common/guards/roles.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { ValidationPipe } from './common/pipes/validation.pipe';
+import { AuditInterceptor } from './modules/audit-log/interceptors/audit.interceptor';
+import { validate } from './config/env.validation';
+import { RedisConfig } from './config/redis.config';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      validate,
+      isGlobal: true,
+    }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useClass: RedisConfig,
+    }),
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    RolesModule,
+    PermissionsModule,
+    AuditLogModule,
+    CommonModule,
+    ExportModule,
+  ],
+  controllers: [AppController],
+  providers: [
+    AppService,
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_PIPE,
+      useClass: ValidationPipe,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
+  ],
+})
+export class AppModule {}
+-e \n--- FILE: src/common/filters/global-exception.filter.ts ---
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
+
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(GlobalExceptionFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message = 'Internal server error';
+    let error = 'Unknown error';
+
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const errorResponse = exception.getResponse();
+      message = typeof errorResponse === 'string' ? errorResponse : (errorResponse as any).message;
+      error = exception.name;
+    } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+      status = HttpStatus.BAD_REQUEST;
+      message = this.handlePrismaError(exception);
+      error = 'Database Error';
+    } else if (exception instanceof Prisma.PrismaClientValidationError) {
+      status = HttpStatus.BAD_REQUEST;
+      message = 'Invalid data provided to database';
+      error = 'Validation Error';
+    }
+
+    this.logger.error(`${request.method} ${request.url} - ${status} - ${message}`, 
+      exception instanceof Error ? exception.stack : undefined);
+
+    response.status(status).json({
+      statusCode: status,
+      message,
+      error,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    });
+  }
+
+  private handlePrismaError(error: Prisma.PrismaClientKnownRequestError): string {
+    switch (error.code) {
+      case 'P2002':
+        return `Unique constraint failed on field: ${error.meta?.target}`;
+      case 'P2025':
+        return 'Record not found';
+      default:
+        return 'Database error occurred';
+    }
+  }
+}-e \n--- FILE: src/common/interceptors/cache.interceptor.ts ---
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Inject } from '@nestjs/common';
+import { Observable, of } from 'rxjs';
+import { tap } from 'rxjs/operators';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Reflector } from '@nestjs/core';
+import type { Cache } from 'cache-manager';
+
+@Injectable()
+export class CustomCacheInterceptor implements NestInterceptor {
+  constructor(
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private reflector: Reflector,
+  ) {}
+
+  async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
+    const key = this.getCacheKey(context);
+    const ttl = this.getCacheTTL(context);
+    
+    if (!key) {
+      return next.handle();
+    }
+
+    const cached = await this.cacheManager.get(key);
+    
+    if (cached) {
+      return of(cached);
+    }
+
+    return next.handle().pipe(
+      tap(response => {
+        if (response) {
+          this.cacheManager.set(key, response, ttl);
+        }
+      }),
+    );
+  }
+
+  private getCacheKey(context: ExecutionContext): string | null {
+    const request = context.switchToHttp().getRequest();
+    const { method, url, user } = request;
+    
+    if (user?.userId) {
+      return `cache:${user.userId}:${method}:${url}`;
+    }
+    
+    return `cache:anonymous:${method}:${url}`;
+  }
+
+  private getCacheTTL(context: ExecutionContext): number {
+    return this.reflector.get<number>('cache_ttl', context.getHandler()) || 60;
+  }
+}
+-e \n--- FILE: src/common/decorators/roles.decorator.ts ---
+import { SetMetadata } from '@nestjs/common';
+
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
+-e \n--- FILE: src/common/decorators/cache-ttl.decorator.ts ---
+import { SetMetadata } from '@nestjs/common';
+
+export const CACHE_TTL_KEY = 'cache_ttl';
+export const CacheTTL = (ttl: number) => SetMetadata(CACHE_TTL_KEY, ttl);
+-e \n--- FILE: src/common/decorators/public.decorator.ts ---
+import { SetMetadata } from '@nestjs/common';
+
+export const IS_PUBLIC_KEY = 'isPublic';
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);-e \n--- FILE: src/common/common.module.ts ---
+import { Global, Module } from '@nestjs/common';
+import { CacheService } from './services/cache.service';
+
+@Global()
+@Module({
+  providers: [CacheService],
+  exports: [CacheService],
+})
+export class CommonModule {}
+-e \n--- FILE: src/common/pipes/validation.pipe.ts ---
+import { Injectable, PipeTransform, ArgumentMetadata, BadRequestException } from '@nestjs/common';
+import { validate } from 'class-validator';
+import { plainToClass } from 'class-transformer';
+
+@Injectable()
+export class ValidationPipe implements PipeTransform<any> {
+  async transform(value: any, { metatype }: ArgumentMetadata) {
+    if (!metatype || !this.toValidate(metatype)) {
+      return value;
+    }
+
+    const object = plainToClass(metatype, value);
+    const errors = await validate(object);
+
+    if (errors.length > 0) {
+      const messages = errors.map(error => {
+        return {
+          property: error.property,
+          constraints: error.constraints,
+        };
+      });
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: messages,
+      });
+    }
+
+    return object;
+  }
+
+  private toValidate(metatype: any): boolean {
+    const types = [String, Boolean, Number, Array, Object];
+    return !types.includes(metatype);
+  }
+}-e \n--- FILE: src/common/services/cache.service.ts ---
+import { Injectable, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+
+@Injectable()
+export class CacheService {
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+
+  async get<T>(key: string): Promise<T | null> {
+    const result = await this.cacheManager.get<T>(key);
+    return result ?? null;
+  }
+
+  async set(key: string, value: any, ttl?: number): Promise<void> {
+    await this.cacheManager.set(key, value, ttl as any);
+  }
+
+  async del(key: string): Promise<void> {
+    await this.cacheManager.del(key);
+  }
+
+  // Users cache methods
+  async clearUsersCache(): Promise<void> {
+    await this.del('users:all');
+  }
+
+  async getUsers(): Promise<any> {
+    return this.get('users:all');
+  }
+
+  async setUsers(users: any): Promise<void> {
+    await this.set('users:all', users, 60);
+  }
+
+  async getUserById(id: number): Promise<any> {
+    return this.get(`users:${id}`);
+  }
+
+  async setUserById(id: number, user: any): Promise<void> {
+    await this.set(`users:${id}`, user, 60);
+  }
+
+  // Roles cache methods
+  async clearRolesCache(): Promise<void> {
+    await this.del('roles:all');
+  }
+
+  async getRoles(): Promise<any> {
+    return this.get('roles:all');
+  }
+
+  async setRoles(roles: any): Promise<void> {
+    await this.set('roles:all', roles, 120);
+  }
+
+  async getRoleById(id: number): Promise<any> {
+    return this.get(`roles:${id}`);
+  }
+
+  async setRoleById(id: number, role: any): Promise<void> {
+    await this.set(`roles:${id}`, role, 120);
+  }
+}
+-e \n--- FILE: src/common/guards/roles.guard.ts ---
+// src/common/guards/roles.guard.ts
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Logger } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { ROLES_KEY } from '../decorators/roles.decorator';
+import { PrismaService } from '../../prisma/prisma.service';
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  private readonly logger = new Logger(RolesGuard.name);
+
+  constructor(
+    private reflector: Reflector,
+    private prisma: PrismaService,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    
+    if (!requiredRoles) {
+      return true;
+    }
+
+    const { user } = context.switchToHttp().getRequest();
+    if (!user) {
+      throw new ForbiddenException('User not found');
+    }
+
+    try {
+      // Vérifier si l'utilisateur a le rôle requis
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: user.userId },
+        include: {
+          role: true,
+        },
+      });
+
+      if (!dbUser || !dbUser.role) {
+        throw new ForbiddenException('Role not found');
+      }
+
+      // Vérifier si le nom du rôle correspond
+      const hasRole = requiredRoles.includes(dbUser.role.name);
+      if (!hasRole) {
+        throw new ForbiddenException('Insufficient permissions');
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Error in RolesGuard: ${error.message}`);
+      
+      // En cas d'erreur de DB, on refuse l'accès par sécurité
+      if (error.code === 'P1001' || error.message.includes('database')) {
+        throw new ForbiddenException('Database connection error');
+      }
+      
+      throw error;
+    }
+  }
+}
+-e \n--- FILE: src/common/guards/jwt-auth.guard.ts ---
+import { Injectable, ExecutionContext } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private reflector: Reflector) {
+    super();
+  }
+
+  canActivate(context: ExecutionContext) {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
+    return super.canActivate(context);
+  }
+}-e \n--- FILE: src/app.controller.ts ---
+import { Controller, Get } from '@nestjs/common';
+import { AppService } from './app.service';
+
+@Controller()
+export class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  @Get()
+  getHello(): string {
+    return this.appService.getHello();
+  }
+}
+-e \n--- FILE: src/modules/auth/dto/login.dto.ts ---
+import { IsEmail, IsString, MinLength } from 'class-validator';
+
+export class LoginDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(6)
+  password: string;
+}
+-e \n--- FILE: src/modules/auth/dto/reset-password.dto.ts ---
+import { IsString, MinLength } from 'class-validator';
+
+export class ResetPasswordDto {
+  @IsString()
+  token: string;
+
+  @IsString()
+  @MinLength(6)
+  newPassword: string;
+}
+-e \n--- FILE: src/modules/auth/dto/forgot-password.dto.ts ---
+import { IsEmail } from 'class-validator';
+
+export class ForgotPasswordDto {
+  @IsEmail()
+  email: string;
+}
+-e \n--- FILE: src/modules/auth/dto/verify-2fa.dto.ts ---
+import { IsString, Length, IsEmail } from 'class-validator';
+
+export class Verify2FADto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  password: string;
+
+  @IsString()
+  @Length(6, 6)
+  token: string;
+}
+-e \n--- FILE: src/modules/auth/dto/enable-2fa.dto.ts ---
+import { IsString, Length } from 'class-validator';
+
+export class Enable2FADto {
+  @IsString()
+  @Length(6, 6)
+  token: string;
+}
+-e \n--- FILE: src/modules/auth/dto/register.dto.ts ---
+import { IsEmail, IsString, MinLength, IsNotEmpty, IsInt } from 'class-validator';
+
+export class RegisterDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(6)
+  password: string;
+
+  @IsInt()
+  roleId: number;
+}
+-e \n--- FILE: src/modules/auth/dto/refresh-token.dto.ts ---
+import { IsString } from 'class-validator';
+
+export class RefreshTokenDto {
+  @IsString()
+  refreshToken: string;
+}
+-e \n--- FILE: src/modules/auth/auth.controller.ts ---
+import { Body, Controller, Post, UseGuards, Get } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { TwoFactorService } from './two-factor.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { Enable2FADto } from './dto/enable-2fa.dto';
+import { Verify2FADto } from './dto/verify-2fa.dto';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { RefreshTokenGuard } from './guards/refresh-token.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Public } from '../../common/decorators/public.decorator';
+
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private authService: AuthService,
+    private twoFactorService: TwoFactorService,
+  ) {}
+
+  @Public()
+  @Post('login')
+  async login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('login/2fa')
+  async loginWith2FA(@Body() dto: Verify2FADto) {
+    return this.authService.loginWith2FA(dto.email, dto.password, dto.token);
+  }
+
+  @Public()
+  @Post('register')
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
+  }
+
+  @Public()
+  @Post('refresh')
+  @UseGuards(RefreshTokenGuard)
+  async refreshTokens(@CurrentUser() user: any, @Body() dto: RefreshTokenDto) {
+    return this.authService.refreshTokens(user.userId, dto.refreshToken);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@CurrentUser() user: any) {
+    return this.authService.getProfile(user.userId);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  logout(@CurrentUser() user: any) {
+    return this.authService.logout(user.userId);
+  }
+
+  // 2FA Endpoints
+  @Post('2fa/generate')
+  @UseGuards(JwtAuthGuard)
+  async generate2FA(@CurrentUser() user: any) {
+    return this.twoFactorService.generateTwoFactorSecret(user.userId);
+  }
+
+  @Post('2fa/enable')
+  @UseGuards(JwtAuthGuard)
+  async enable2FA(
+    @CurrentUser() user: any,
+    @Body() dto: Enable2FADto,
+  ) {
+    return this.twoFactorService.enableTwoFactor(user.userId, dto.token);
+  }
+
+  @Post('2fa/disable')
+  @UseGuards(JwtAuthGuard)
+  async disable2FA(@CurrentUser() user: any) {
+    return this.twoFactorService.disableTwoFactor(user.userId);
+  }
+
+  @Get('2fa/status')
+  @UseGuards(JwtAuthGuard)
+  async get2FAStatus(@CurrentUser() user: any) {
+    return this.twoFactorService.get2FAStatus(user.userId);
+  }
+}
+-e \n--- FILE: src/modules/auth/auth.service.ts ---
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../../prisma/prisma.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { UsersService } from '../users/users.service';
+import { TwoFactorService } from './two-factor.service';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
+    private usersService: UsersService,
+    private twoFactorService: TwoFactorService,
+  ) {}
+
+  async login(dto: LoginDto) {
+    const user = await this.validateUser(dto.email, dto.password);
+    const tokens = await this.generateTokens(user.id, user.roleId);
+    
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+    
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        roleId: user.roleId,
+      },
+      ...tokens,
+    };
+  }
+
+  async loginWith2FA(email: string, password: string, token: string) {
+    const user = await this.twoFactorService.validateTwoFactorLogin(email, password, token);
+    
+    const tokens = await this.generateTokens(user.id, user.roleId);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+    
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        roleId: user.roleId,
+        isTwoFactorEnabled: user.isTwoFactorEnabled,
+      },
+      ...tokens,
+    };
+  }
+
+  async register(dto: RegisterDto) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('Email already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    
+    const user = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        password: hashedPassword,
+        roleId: dto.roleId,
+        isActive: true,
+      },
+    });
+
+    const tokens = await this.generateTokens(user.id, user.roleId);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        roleId: user.roleId,
+      },
+      ...tokens,
+    };
+  }
+
+  async refreshTokens(userId: number, refreshToken: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.refreshToken) {
+      throw new UnauthorizedException('Access denied');
+    }
+
+    const refreshTokenMatches = await bcrypt.compare(
+      refreshToken,
+      user.refreshToken
+    );
+
+    if (!refreshTokenMatches) {
+      throw new UnauthorizedException('Access denied');
+    }
+
+    const tokens = await this.generateTokens(user.id, user.roleId);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    return tokens;
+  }
+
+  async logout(userId: number) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: null },
+    });
+    
+    return { message: 'Logged out successfully' };
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return { message: 'If email exists, reset link will be sent' };
+    }
+
+    const resetToken = this.jwtService.sign(
+      { sub: user.id },
+      { expiresIn: '1h' },
+    );
+
+    return { 
+      message: 'Reset link sent to email',
+      resetToken,
+    };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    try {
+      const payload = this.jwtService.verify(token);
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      await this.prisma.user.update({
+        where: { id: payload.sub },
+        data: { password: hashedPassword },
+      });
+
+      return { message: 'Password reset successful' };
+    } catch {
+      throw new BadRequestException('Invalid or expired token');
+    }
+  }
+
+  async getProfile(userId: number) {
+    return this.usersService.findOne(userId);
+  }
+
+  private async validateUser(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return user;
+  }
+
+  private async generateTokens(userId: number, roleId: number) {
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(
+        { sub: userId, role: roleId },
+        {
+          secret: this.configService.get('JWT_SECRET'),
+          expiresIn: '15m',
+        },
+      ),
+      this.jwtService.signAsync(
+        { sub: userId, role: roleId },
+        {
+          secret: this.configService.get('JWT_REFRESH_SECRET'),
+          expiresIn: '7d',
+        },
+      ),
+    ]);
+
+    return { accessToken, refreshToken };
+  }
+
+  private async updateRefreshToken(userId: number, refreshToken: string) {
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: hashedRefreshToken },
+    });
+  }
+}
+-e \n--- FILE: src/modules/auth/decorators/current-user.decorator.ts ---
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+
+export const CurrentUser = createParamDecorator(
+  (data: unknown, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.user;
+  },
+);
+-e \n--- FILE: src/modules/auth/two-factor.service.ts ---
+import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import * as speakeasy from 'speakeasy';
+import * as QRCode from 'qrcode';
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../../prisma/prisma.service';
+
+@Injectable()
+export class TwoFactorService {
+  constructor(private prisma: PrismaService) {}
+
+  async generateTwoFactorSecret(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Utilisateur non trouvé');
+    }
+
+    const secret = speakeasy.generateSecret({
+      name: `ENTRESAAS:${user.email}`,
+      issuer: 'ENTRESAAS',
+    });
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorSecret: secret.base32 },
+    });
+
+    let qrCode = '';
+    if (secret.otpauth_url) {
+      qrCode = await QRCode.toDataURL(secret.otpauth_url);
+    }
+
+    return {
+      secret: secret.base32,
+      qrCode,
+      message: 'Scannez ce QR code avec Google Authenticator',
+    };
+  }
+
+  async enableTwoFactor(userId: number, token: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.twoFactorSecret) {
+      throw new BadRequestException('Secret 2FA non trouvé');
+    }
+
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token: token,
+      window: 1,
+    });
+
+    if (!verified) {
+      throw new BadRequestException('Token 2FA invalide');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { isTwoFactorEnabled: true },
+    });
+
+    return {
+      message: '2FA activé avec succès',
+      backupCodes: this.generateBackupCodes(),
+    };
+  }
+
+  async disableTwoFactor(userId: number) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isTwoFactorEnabled: false,
+        twoFactorSecret: null,
+      },
+    });
+
+    return { message: '2FA désactivé avec succès' };
+  }
+
+  async verifyTwoFactorToken(userId: number, token: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.twoFactorSecret || !user.isTwoFactorEnabled) {
+      return false;
+    }
+
+    return speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token: token,
+      window: 1,
+    });
+  }
+
+  async validateTwoFactorLogin(email: string, password: string, token: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Identifiants invalides');
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Identifiants invalides');
+    }
+
+    if (user.isTwoFactorEnabled) {
+      const isValidToken = await this.verifyTwoFactorToken(user.id, token);
+      if (!isValidToken) {
+        throw new UnauthorizedException('Token 2FA invalide');
+      }
+    }
+
+    return user;
+  }
+
+  private generateBackupCodes(): string[] {
+    const codes: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      codes.push(code);
+    }
+    return codes;
+  }
+
+  async get2FAStatus(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isTwoFactorEnabled: true },
+    });
+
+    return {
+      isEnabled: user?.isTwoFactorEnabled || false,
+    };
+  }
+}
+-e \n--- FILE: src/modules/auth/strategies/refresh.strategy.ts ---
+import { PassportStrategy } from '@nestjs/passport';
+import { Strategy, ExtractJwt } from 'passport-jwt';
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
+  constructor() {
+    super({
+      jwtFromRequest: ExtractJwt.fromBodyField('refreshToken'),
+      secretOrKey: process.env.JWT_REFRESH_SECRET,
+      passReqToCallback: true,
+    });
+  }
+
+  async validate(req: any, payload: any) {
+    return { userId: payload.sub, role: payload.role };
+  }
+}
+-e \n--- FILE: src/modules/auth/strategies/jwt.strategy.ts ---
+import { PassportStrategy } from '@nestjs/passport';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class JwtStrategy extends PassportStrategy(Strategy) {
+  constructor() {
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      secretOrKey: process.env.JWT_SECRET,
+    });
+  }
+
+  async validate(payload: any) {
+    return { userId: payload.sub, role: payload.role };
+  }
+}
+-e \n--- FILE: src/modules/auth/auth.module.ts ---
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { ConfigService } from '@nestjs/config';
+import { AuthService } from './auth.service';
+import { TwoFactorService } from './two-factor.service';
+import { AuthController } from './auth.controller';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { RefreshTokenStrategy } from './strategies/refresh.strategy';
+import { UsersModule } from '../users/users.module';
+
+@Module({
+  imports: [
+    UsersModule,
+    PassportModule,
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get('JWT_SECRET'),
+        signOptions: { expiresIn: '15m' },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, TwoFactorService, JwtStrategy, RefreshTokenStrategy],
+  exports: [AuthService, TwoFactorService],
+})
+export class AuthModule {}
+-e \n--- FILE: src/modules/auth/guards/refresh-token.guard.ts ---
+// src/modules/auth/guards/refresh-token.guard.ts
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+
+@Injectable()
+export class RefreshTokenGuard implements CanActivate {
+  constructor(
+    private jwtService: JwtService,
+    private configService: ConfigService,
+  ) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    const refreshToken = request.body?.refreshToken;
+    
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token not found');
+    }
+
+    try {
+      const payload = this.jwtService.verify(refreshToken, {
+        secret: this.configService.get('JWT_REFRESH_SECRET'),
+      });
+      
+      // IMPORTANT: Mettre le userId dans request.user
+      request.user = { 
+        userId: payload.sub,  // Le sub est l'userId
+        role: payload.role 
+      };
+      
+      return true;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+}-e \n--- FILE: src/modules/roles/dto/create-role.dto.ts ---
+import { IsString, IsArray, ArrayNotEmpty, IsOptional, IsInt } from 'class-validator';
+
+export class CreateRoleDto {
+  @IsString()
+  name: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsInt({ each: true })
+  permissionIds: number[];
+}
+-e \n--- FILE: src/modules/roles/dto/update-role.dto.ts ---
+import { IsString, IsArray, ArrayNotEmpty, IsOptional, IsInt } from 'class-validator';
+
+export class UpdateRoleDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsInt({ each: true })
+  permissionIds?: number[];
+}
+-e \n--- FILE: src/modules/roles/dto/index.ts ---
+export * from './create-role.dto';
+export * from './update-role.dto';
+-e \n--- FILE: src/modules/roles/roles.controller.ts ---
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { RolesService } from './roles.service';
+import { CreateRoleDto, UpdateRoleDto } from './dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+
+@Controller('roles')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class RolesController {
+  constructor(private service: RolesService) {}
+
+  @Get() @Roles('ADMIN') findAll() { return this.service.findAll(); }
+  @Post() @Roles('ADMIN') create(@Body() dto: CreateRoleDto) { return this.service.createRole(dto); }
+  @Patch(':id') @Roles('ADMIN') update(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
+    return this.service.updateRole(+id, dto);
+  }
+  @Delete(':id') @Roles('ADMIN') remove(@Param('id') id: string) { return this.service.deleteRole(+id); }
+}
+-e \n--- FILE: src/modules/roles/roles.module.ts ---
+import { Module } from '@nestjs/common';
+import { RolesService } from './roles.service';
+import { RolesController } from './roles.controller';
+import { PrismaModule } from '../../prisma/prisma.module';
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [RolesController],
+  providers: [RolesService],
+  exports: [RolesService],
+})
+export class RolesModule {}
+-e \n--- FILE: src/modules/roles/roles.service.ts ---
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateRoleDto, UpdateRoleDto } from './dto';
+import { CacheService } from '../../common/services/cache.service';
+
+@Injectable()
+export class RolesService {
+  constructor(
+    private prisma: PrismaService,
+    private cacheService: CacheService,
+  ) {}
+
+  async createRole(dto: CreateRoleDto) {
+    const role = await this.prisma.role.create({
+      data: { 
+        name: dto.name, 
+        permissions: { connect: dto.permissionIds.map(id => ({ id })) } 
+      },
+      include: { permissions: true },
+    });
+    
+    await this.cacheService.clearRolesCache();
+    return role;
+  }
+
+  async updateRole(id: number, dto: UpdateRoleDto) {
+    const role = await this.prisma.role.update({
+      where: { id },
+      data: { 
+        name: dto.name, 
+        permissions: dto.permissionIds ? { set: dto.permissionIds.map(id => ({ id })) } : undefined 
+      },
+      include: { permissions: true },
+    });
+    
+    await this.cacheService.clearRolesCache();
+    await this.cacheService.del(`roles:${id}`);
+    return role;
+  }
+
+  async deleteRole(id: number) {
+    const role = await this.prisma.role.delete({ 
+      where: { id } 
+    });
+    
+    await this.cacheService.clearRolesCache();
+    await this.cacheService.del(`roles:${id}`);
+    return role;
+  }
+
+  async findAll() {
+    const cached = await this.cacheService.getRoles();
+    if (cached) {
+      console.log('📦 Rôles servis depuis le cache');
+      return cached;
+    }
+
+    console.log('🔄 Rôles servis depuis la base de données');
+    const roles = await this.prisma.role.findMany({ 
+      include: { permissions: true } 
+    });
+    
+    await this.cacheService.setRoles(roles);
+    return roles;
+  }
+
+  async findOne(id: number) {
+    const cached = await this.cacheService.getRoleById(id);
+    if (cached) {
+      console.log(`📦 Rôle ${id} servi depuis le cache`);
+      return cached;
+    }
+
+    console.log(`🔄 Rôle ${id} servi depuis la base de données`);
+    const role = await this.prisma.role.findUnique({ 
+      where: { id }, 
+      include: { permissions: true } 
+    });
+    
+    if (!role) {
+      throw new NotFoundException(`Rôle avec ID ${id} non trouvé`);
+    }
+    
+    await this.cacheService.setRoleById(id, role);
+    return role;
+  }
+}
+-e \n--- FILE: src/modules/audit-log/dto/create-log.dto.ts ---
+import { IsString, IsInt, IsOptional } from 'class-validator';
+
+export class CreateLogDto {
+  @IsString()
+  action: string;
+
+  @IsInt()
+  userId: number;
+
+  @IsOptional()
+  @IsString()
+  ip?: string;
+
+  @IsOptional()
+  payload?: any;
+}
+-e \n--- FILE: src/modules/audit-log/dto/index.ts ---
+export * from './create-log.dto';
+-e \n--- FILE: src/modules/audit-log/interceptors/audit.interceptor.ts ---
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Observable, tap } from 'rxjs';
+import { AuditLogService } from '../audit-log.service';
+
+@Injectable()
+export class AuditInterceptor implements NestInterceptor {
+  constructor(private auditLogService: AuditLogService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    return next.handle().pipe(
+      tap(() => {
+        if (user) {
+          this.auditLogService.createLog({
+            action: `${request.method} ${request.url}`,
+            userId: user.userId,
+            ip: request.ip,
+            payload: request.body,
+          });
+        }
+      }),
+    );
+  }
+}
+-e \n--- FILE: src/modules/audit-log/audit-log.module.ts ---
+import { Module } from '@nestjs/common';
+import { AuditLogService } from './audit-log.service';
+import { AuditLogController } from './audit-log.controller';
+import { AuditInterceptor } from './interceptors/audit.interceptor';
+import { PrismaModule } from '../../prisma/prisma.module';
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [AuditLogController],
+  providers: [AuditLogService, AuditInterceptor],
+  exports: [AuditLogService],
+})
+export class AuditLogModule {}
+-e \n--- FILE: src/modules/audit-log/audit-log.service.ts ---
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateLogDto } from './dto/create-log.dto';
+
+@Injectable()
+export class AuditLogService {
+  constructor(private prisma: PrismaService) {}
+
+  createLog(dto: CreateLogDto) {
+    return this.prisma.auditLog.create({ data: dto });
+  }
+
+  findAll() {
+    return this.prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+}
+-e \n--- FILE: src/modules/audit-log/audit-log.controller.ts ---
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { AuditLogService } from './audit-log.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+
+@Controller('audit-log')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class AuditLogController {
+  constructor(private service: AuditLogService) {}
+
+  @Get() @Roles('ADMIN') findAll() { return this.service.findAll(); }
+}
+-e \n--- FILE: src/modules/permissions/dto/create-permission.dto.ts ---
+import { IsString } from 'class-validator';
+
+export class CreatePermissionDto {
+  @IsString()
+  name: string;
+}
+-e \n--- FILE: src/modules/permissions/dto/index.ts ---
+export * from './create-permission.dto';
+export * from './update-permission.dto';
+-e \n--- FILE: src/modules/permissions/dto/update-permission.dto.ts ---
+import { IsOptional, IsString } from 'class-validator';
+
+export class UpdatePermissionDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+}
+-e \n--- FILE: src/modules/permissions/permissions.controller.ts ---
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { PermissionsService } from './permissions.service';
+import { CreatePermissionDto, UpdatePermissionDto } from './dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+
+@Controller('permissions')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class PermissionsController {
+  constructor(private service: PermissionsService) {}
+
+  @Get() @Roles('ADMIN') findAll() { return this.service.findAll(); }
+  @Post() @Roles('ADMIN') create(@Body() dto: CreatePermissionDto) { return this.service.createPermission(dto); }
+  @Patch(':id') @Roles('ADMIN') update(@Param('id') id: string, @Body() dto: UpdatePermissionDto) {
+    return this.service.updatePermission(+id, dto);
+  }
+  @Delete(':id') @Roles('ADMIN') remove(@Param('id') id: string) { return this.service.deletePermission(+id); }
+}
+-e \n--- FILE: src/modules/permissions/permissions.service.ts ---
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreatePermissionDto, UpdatePermissionDto } from './dto';
+
+@Injectable()
+export class PermissionsService {
+  constructor(private prisma: PrismaService) {}
+
+  createPermission(dto: CreatePermissionDto) {
+    return this.prisma.permission.create({ data: dto });
+  }
+
+  updatePermission(id: number, dto: UpdatePermissionDto) {
+    return this.prisma.permission.update({ where: { id }, data: dto });
+  }
+
+  deletePermission(id: number) {
+    return this.prisma.permission.delete({ where: { id } });
+  }
+
+  findAll() {
+    return this.prisma.permission.findMany();
+  }
+
+  findOne(id: number) {
+    return this.prisma.permission.findUnique({ where: { id } });
+  }
+}
+-e \n--- FILE: src/modules/permissions/permissions.module.ts ---
+import { Module } from '@nestjs/common';
+import { PermissionsService } from './permissions.service';
+import { PermissionsController } from './permissions.controller';
+import { PrismaModule } from '../../prisma/prisma.module';
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [PermissionsController],
+  providers: [PermissionsService],
+  exports: [PermissionsService],
+})
+export class PermissionsModule {}
+-e \n--- FILE: src/modules/users/dto/user-response.dto.ts ---
+import { Exclude, Expose, Transform } from 'class-transformer';
+
+export class UserResponseDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  email: string;
+
+  @Expose()
+  roleId: number;
+
+  @Expose()
+  roleName?: string;
+
+  @Expose()
+  isActive: boolean;
+
+  @Expose()
+  createdAt: Date;
+
+  @Exclude()
+  password?: string;
+
+  @Exclude()
+  refreshToken?: string;
+
+  @Exclude()
+  twoFactorSecret?: string;
+
+  @Exclude()
+  isTwoFactorEnabled?: boolean;
+
+  constructor(partial: Partial<UserResponseDto>) {
+    Object.assign(this, partial);
+  }
+}
+-e \n--- FILE: src/modules/users/dto/update-user.dto.ts ---
+import { IsEmail, IsOptional, IsString, MinLength, IsInt, IsBoolean } from 'class-validator';
+
+export class UpdateUserDto {
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
+
+  @IsOptional()
+  @IsInt()
+  roleId?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+-e \n--- FILE: src/modules/users/dto/pagination.dto.ts ---
+import { IsOptional, IsInt, Min, Max, IsString, IsIn } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class PaginationDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
+
+  @IsOptional()
+  @IsString()
+  sortBy?: string = 'id';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc' = 'asc';
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+-e \n--- FILE: src/modules/users/dto/index.ts ---
+export * from './create-user.dto';
+export * from './update-user.dto';
+-e \n--- FILE: src/modules/users/dto/create-user.dto.ts ---
+import { IsEmail, IsString, MinLength, IsInt, IsBoolean } from 'class-validator';
+
+export class CreateUserDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(6)
+  password: string;
+
+  @IsInt()
+  roleId: number;
+
+  @IsBoolean()
+  isActive: boolean;
+}
+-e \n--- FILE: src/modules/users/users.controller.v1.ts ---
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Version } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+
+@Controller({
+  path: 'users',
+  version: '1',
+})
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class UsersControllerV1 {
+  constructor(private service: UsersService) {}
+
+  @Get()
+  @Roles('ADMIN')
+  findAll() {
+    return this.service.findAll();
+  }
+
+  @Get(':id')
+  @Roles('ADMIN')
+  findOne(@Param('id') id: string) {
+    return this.service.findOne(+id);
+  }
+
+  @Post()
+  @Roles('ADMIN')
+  create(@Body() dto: CreateUserDto) {
+    return this.service.createUser(dto);
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN')
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.service.updateUser(+id, dto);
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  remove(@Param('id') id: string) {
+    return this.service.deleteUser(+id);
+  }
+}
+-e \n--- FILE: src/modules/users/users.service.ts ---
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import * as bcrypt from 'bcrypt';
+import { CacheService } from '../../common/services/cache.service';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    private prisma: PrismaService,
+    private cacheService: CacheService,
+  ) {}
+
+  async createUser(dto: CreateUserDto) {
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    
+    const user = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        password: hashedPassword,
+        roleId: dto.roleId,
+        isActive: dto.isActive,
+      },
+    });
+
+    await this.cacheService.clearUsersCache();
+    
+    return user;
+  }
+
+  async updateUser(id: number, dto: UpdateUserDto) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const data: any = { ...dto };
+    if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id },
+      data,
+    });
+
+    await this.cacheService.clearUsersCache();
+    await this.cacheService.del(`users:${id}`);
+    
+    return updatedUser;
+  }
+
+  async deleteUser(id: number) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    
+    await this.prisma.user.delete({ where: { id } });
+    
+    await this.cacheService.clearUsersCache();
+    await this.cacheService.del(`users:${id}`);
+  }
+
+  async findAll() {
+    const cached = await this.cacheService.getUsers();
+    if (cached) {
+      console.log('📦 Données servies depuis le cache');
+      return cached;
+    }
+
+    console.log('🔄 Données servies depuis la base de données');
+    const users = await this.prisma.user.findMany({
+      select: { id: true, email: true, roleId: true, isActive: true },
+    });
+
+    await this.cacheService.setUsers(users);
+    
+    return users;
+  }
+
+  async findOne(id: number) {
+    const cached = await this.cacheService.getUserById(id);
+    if (cached) {
+      console.log(`�� User ${id} servi depuis le cache`);
+      return cached;
+    }
+
+    console.log(`🔄 User ${id} servi depuis la base de données`);
+    const user = await this.prisma.user.findUnique({ 
+      where: { id } 
+    });
+    
+    if (!user) throw new NotFoundException('User not found');
+    
+    await this.cacheService.setUserById(id, user);
+    
+    return user;
+  }
+
+  async getUserStatsByRole() {
+    const users = await this.prisma.user.groupBy({
+      by: ['roleId'],
+      _count: {
+        id: true,
+      },
+    });
+
+    const roles = await this.prisma.role.findMany();
+    
+    return users.map(stat => ({
+      roleId: stat.roleId,
+      roleName: roles.find(r => r.id === stat.roleId)?.name,
+      count: stat._count.id,
+    }));
+  }
+}
+-e \n--- FILE: src/modules/users/users.module.ts ---
+import { Module } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { UsersControllerV1 } from './users.controller.v1';
+import { UsersControllerV2 } from './users.controller.v2';
+import { PrismaModule } from '../../prisma/prisma.module';
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [UsersControllerV1, UsersControllerV2],
+  providers: [UsersService],
+  exports: [UsersService],
+})
+export class UsersModule {}
+-e \n--- FILE: src/modules/users/users.controller.v2.ts ---
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query, NotFoundException } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { PaginationDto } from './dto/pagination.dto';
+import { UserResponseDto } from './dto/user-response.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+
+@Controller({
+  path: 'users',
+  version: '2',
+})
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class UsersControllerV2 {
+  constructor(private service: UsersService) {}
+
+  @Get()
+  @Roles('ADMIN')
+  async findAll(@Query() pagination: PaginationDto) {
+    const users = await this.service.findAll();
+    
+    const page = pagination.page || 1;
+    const limit = pagination.limit || 10;
+    
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paginatedUsers = users.slice(start, end);
+    
+    // Récupérer les rôles pour avoir les noms
+    const roles = await this.prisma.role.findMany();
+    
+    return {
+      data: paginatedUsers.map(user => {
+        const role = roles.find(r => r.id === user.roleId);
+        return new UserResponseDto({
+          id: user.id,
+          email: user.email,
+          roleId: user.roleId,
+          roleName: role?.name,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+        });
+      }),
+      meta: {
+        page,
+        limit,
+        total: users.length,
+        totalPages: Math.ceil(users.length / limit),
+      },
+    };
+  }
+
+  @Get('stats')
+  @Roles('ADMIN')
+  async getStats() {
+    const users = await this.service.findAll();
+    const statsByRole = await this.service.getUserStatsByRole();
+    
+    return {
+      total: users.length,
+      active: users.filter(u => u.isActive).length,
+      inactive: users.filter(u => !u.isActive).length,
+      byRole: statsByRole,
+    };
+  }
+
+  @Get(':id')
+  @Roles('ADMIN')
+  async findOne(@Param('id') id: string) {
+    const user = await this.service.findOne(+id);
+    if (!user) {
+      throw new NotFoundException(`Utilisateur avec ID ${id} non trouvé`);
+    }
+    
+    // Récupérer le rôle pour avoir le nom
+    const role = await this.prisma.role.findUnique({
+      where: { id: user.roleId }
+    });
+    
+    return new UserResponseDto({
+      id: user.id,
+      email: user.email,
+      roleId: user.roleId,
+      roleName: role?.name,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    });
+  }
+
+  @Post()
+  @Roles('ADMIN')
+  async create(@Body() dto: CreateUserDto) {
+    const user = await this.service.createUser(dto);
+    
+    // Récupérer le rôle pour avoir le nom
+    const role = await this.prisma.role.findUnique({
+      where: { id: user.roleId }
+    });
+    
+    return new UserResponseDto({
+      id: user.id,
+      email: user.email,
+      roleId: user.roleId,
+      roleName: role?.name,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    });
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN')
+  async update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    const user = await this.service.updateUser(+id, dto);
+    
+    // Récupérer le rôle pour avoir le nom
+    const role = await this.prisma.role.findUnique({
+      where: { id: user.roleId }
+    });
+    
+    return new UserResponseDto({
+      id: user.id,
+      email: user.email,
+      roleId: user.roleId,
+      roleName: role?.name,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    });
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  remove(@Param('id') id: string) {
+    return this.service.deleteUser(+id);
+  }
+
+  // Ajouter une référence à PrismaService
+  private get prisma() {
+    return (this.service as any).prisma;
+  }
+}
+-e \n--- FILE: src/modules/export/dto/export-options.dto.ts ---
+import { IsEnum, IsOptional, IsArray, IsString, IsDateString } from 'class-validator';
+
+export enum ExportFormat {
+  EXCEL = 'excel',
+  PDF = 'pdf',
+  CSV = 'csv',
+}
+
+export enum ExportEntity {
+  USERS = 'users',
+  ROLES = 'roles',
+  PERMISSIONS = 'permissions',
+  AUDIT_LOGS = 'audit-logs',
+}
+
+export class ExportOptionsDto {
+  @IsEnum(ExportFormat)
+  format: ExportFormat;
+
+  @IsEnum(ExportEntity)
+  entity: ExportEntity;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fields?: string[];
+
+  @IsOptional()
+  filters?: any;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: Date;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: Date;
+}
+-e \n--- FILE: src/modules/export/export.controller.ts ---
+import { Controller, Post, Body, Res, UseGuards, Get, Param } from '@nestjs/common';
+import type { Response } from 'express';
+import { ExportService } from './export.service';
+import { ExportOptionsDto, ExportFormat, ExportEntity } from './dto/export-options.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+
+@Controller({
+  path: 'export',
+  version: '1',
+})
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+export class ExportController {
+  constructor(private exportService: ExportService) {}
+
+  @Post()
+  async exportData(@Body() options: ExportOptionsDto, @Res() res: Response) {
+    return this.exportService.exportData(options, res);
+  }
+
+  @Get('users/:format')
+  async exportUsers(@Param('format') format: string, @Res() res: Response) {
+    let exportFormat: ExportFormat;
+    
+    switch(format) {
+      case 'excel':
+        exportFormat = ExportFormat.EXCEL;
+        break;
+      case 'pdf':
+        exportFormat = ExportFormat.PDF;
+        break;
+      case 'csv':
+        exportFormat = ExportFormat.CSV;
+        break;
+      default:
+        exportFormat = ExportFormat.EXCEL;
+    }
+    
+    const options: ExportOptionsDto = {
+      format: exportFormat,
+      entity: ExportEntity.USERS,
+    };
+    return this.exportService.exportData(options, res);
+  }
+
+  @Get('roles/:format')
+  async exportRoles(@Param('format') format: string, @Res() res: Response) {
+    let exportFormat: ExportFormat;
+    
+    switch(format) {
+      case 'excel':
+        exportFormat = ExportFormat.EXCEL;
+        break;
+      case 'pdf':
+        exportFormat = ExportFormat.PDF;
+        break;
+      case 'csv':
+        exportFormat = ExportFormat.CSV;
+        break;
+      default:
+        exportFormat = ExportFormat.EXCEL;
+    }
+    
+    const options: ExportOptionsDto = {
+      format: exportFormat,
+      entity: ExportEntity.ROLES,
+    };
+    return this.exportService.exportData(options, res);
+  }
+
+  @Get('audit-logs/:format')
+  async exportAuditLogs(@Param('format') format: string, @Res() res: Response) {
+    let exportFormat: ExportFormat;
+    
+    switch(format) {
+      case 'excel':
+        exportFormat = ExportFormat.EXCEL;
+        break;
+      case 'pdf':
+        exportFormat = ExportFormat.PDF;
+        break;
+      case 'csv':
+        exportFormat = ExportFormat.CSV;
+        break;
+      default:
+        exportFormat = ExportFormat.EXCEL;
+    }
+    
+    const options: ExportOptionsDto = {
+      format: exportFormat,
+      entity: ExportEntity.AUDIT_LOGS,
+    };
+    return this.exportService.exportData(options, res);
+  }
+}
+-e \n--- FILE: src/modules/export/export.service.ts ---
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { Response } from 'express';
+import * as ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ExportOptionsDto, ExportFormat, ExportEntity } from './dto/export-options.dto';
+
+@Injectable()
+export class ExportService {
+  constructor(private prisma: PrismaService) {}
+
+  async exportData(options: ExportOptionsDto, res: Response) {
+    const data = await this.fetchData(options.entity, options.filters, options.startDate, options.endDate);
+    
+    switch (options.format) {
+      case ExportFormat.EXCEL:
+        return this.exportToExcel(data, options.entity, options.fields, res);
+      case ExportFormat.PDF:
+        return this.exportToPDF(data, options.entity, options.fields, res);
+      case ExportFormat.CSV:
+        return this.exportToCSV(data, options.entity, options.fields, res);
+      default:
+        throw new BadRequestException('Format non supporté');
+    }
+  }
+
+  private async fetchData(entity: ExportEntity, filters?: any, startDate?: Date, endDate?: Date) {
+    const where: any = {};
+    
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(startDate);
+      if (endDate) where.createdAt.lte = new Date(endDate);
+    }
+
+    switch (entity) {
+      case ExportEntity.USERS:
+        return this.prisma.user.findMany({
+          where,
+          include: { role: true },
+        });
+      case ExportEntity.ROLES:
+        return this.prisma.role.findMany({
+          where,
+          include: { permissions: true },
+        });
+      case ExportEntity.PERMISSIONS:
+        return this.prisma.permission.findMany({ where });
+      case ExportEntity.AUDIT_LOGS:
+        return this.prisma.auditLog.findMany({
+          where,
+          include: { user: true },
+          orderBy: { createdAt: 'desc' },
+        });
+      default:
+        throw new BadRequestException('Entité non supportée');
+    }
+  }
+
+  private async exportToExcel(data: any[], entity: ExportEntity, fields: string[] | undefined, res: Response) {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(entity.toString());
+
+    // Définir les colonnes
+    const columns = this.getColumns(entity, fields);
+    worksheet.columns = columns;
+
+    // Ajouter les données
+    data.forEach(item => {
+      const row = {};
+      columns.forEach(col => {
+        row[col.key] = this.getNestedValue(item, col.key);
+      });
+      worksheet.addRow(row);
+    });
+
+    // Styliser l'en-tête
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4F81BD' },
+    };
+    worksheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
+
+    // Ajuster la largeur des colonnes
+    worksheet.columns.forEach(column => {
+      column.width = 20;
+    });
+
+    // Envoyer le fichier
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${entity}-${Date.now()}.xlsx`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  }
+
+  private async exportToPDF(data: any[], entity: ExportEntity, fields: string[] | undefined, res: Response) {
+    const doc = new PDFDocument({ margin: 50 });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=${entity}-${Date.now()}.pdf`);
+
+    doc.pipe(res);
+
+    // Titre
+    doc.fontSize(20).text(`Export ${entity}`, { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Généré le ${new Date().toLocaleString()}`, { align: 'center' });
+    doc.moveDown(2);
+
+    // Données
+    const columns = this.getColumns(entity, fields);
+    
+    data.forEach((item, index) => {
+      doc.fontSize(10).text(`${index + 1}. ${this.formatItemForPDF(item, columns)}`);
+      doc.moveDown(0.5);
+      
+      // Nouvelle page si nécessaire
+      if (doc.y > 700) {
+        doc.addPage();
+      }
+    });
+
+    doc.end();
+  }
+
+  private async exportToCSV(data: any[], entity: ExportEntity, fields: string[] | undefined, res: Response) {
+    const columns = this.getColumns(entity, fields);
+    
+    // Créer l'en-tête CSV
+    let csv = columns.map(col => col.header).join(',') + '\n';
+    
+    // Ajouter les données
+    data.forEach(item => {
+      const row = columns.map(col => {
+        const value = this.getNestedValue(item, col.key);
+        if (value === null || value === undefined) return '';
+        if (typeof value === 'string') return `"${value.replace(/"/g, '""')}"`;
+        if (value instanceof Date) return `"${value.toISOString()}"`;
+        return value;
+      }).join(',');
+      csv += row + '\n';
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=${entity}-${Date.now()}.csv`);
+    res.send(csv);
+  }
+
+  private getColumns(entity: ExportEntity, fields?: string[]) {
+    const allColumns = {
+      [ExportEntity.USERS]: [
+        { header: 'ID', key: 'id' },
+        { header: 'Email', key: 'email' },
+        { header: 'Rôle', key: 'role.name' },
+        { header: 'Actif', key: 'isActive' },
+        { header: 'Créé le', key: 'createdAt' },
+      ],
+      [ExportEntity.ROLES]: [
+        { header: 'ID', key: 'id' },
+        { header: 'Nom', key: 'name' },
+        { header: 'Permissions', key: 'permissions' },
+        { header: 'Créé le', key: 'createdAt' },
+      ],
+      [ExportEntity.PERMISSIONS]: [
+        { header: 'ID', key: 'id' },
+        { header: 'Nom', key: 'name' },
+        { header: 'Créé le', key: 'createdAt' },
+      ],
+      [ExportEntity.AUDIT_LOGS]: [
+        { header: 'ID', key: 'id' },
+        { header: 'Action', key: 'action' },
+        { header: 'Utilisateur', key: 'user.email' },
+        { header: 'IP', key: 'ip' },
+        { header: 'Date', key: 'createdAt' },
+      ],
+    };
+
+    let columns = allColumns[entity] || [];
+    
+    if (fields && fields.length > 0) {
+      columns = columns.filter(col => fields.includes(col.key));
+    }
+
+    return columns;
+  }
+
+  private getNestedValue(obj: any, path: string) {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
+  }
+
+  private formatItemForPDF(item: any, columns: any[]) {
+    return columns.map(col => {
+      const value = this.getNestedValue(item, col.key);
+      return `${col.header}: ${value !== null && value !== undefined ? value : ''}`;
+    }).join(' | ');
+  }
+}
+-e \n--- FILE: src/modules/export/export.module.ts ---
+import { Module } from '@nestjs/common';
+import { ExportService } from './export.service';
+import { ExportController } from './export.controller';
+import { PrismaModule } from '../../prisma/prisma.module';
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [ExportController],
+  providers: [ExportService],
+  exports: [ExportService],
+})
+export class ExportModule {}

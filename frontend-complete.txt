@@ -1,0 +1,798 @@
+========== FRONTEND ENV LOCAL ==========
+NEXT_PUBLIC_API_URL=http://localhost:3001/api
+NEXT_PUBLIC_APP_NAME=ENTRESAAS
+
+
+========== FRONTEND ENV ==========
+Fichier .env non trouvé
+
+
+========== FRONTEND API SERVICE ==========
+// API Service for frontend
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+
+export interface ApiResponse<T> {
+  data: T;
+  statusCode: number;
+  message?: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface UserStats {
+  total: number;
+  active: number;
+  inactive: number;
+  byRole: Array<{
+    roleId: number;
+    roleName: string;
+    count: number;
+  }>;
+}
+
+export interface User {
+  id: number;
+  email: string;
+  roleId: number;
+  roleName?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface Role {
+  id: number;
+  name: string;
+  permissions: Permission[];
+  createdAt: string;
+}
+
+export interface Permission {
+  id: number;
+  name: string;
+  createdAt: string;
+}
+
+class ApiService {
+  private token: string | null = null;
+  private refreshToken: string | null = null;
+
+  constructor() {
+    // Load tokens on startup
+    if (typeof window !== 'undefined') {
+      this.token = localStorage.getItem('accessToken');
+      this.refreshToken = localStorage.getItem('refreshToken');
+    }
+  }
+
+  setTokens(accessToken: string, refreshToken: string) {
+    this.token = accessToken;
+    this.refreshToken = refreshToken;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+    }
+  }
+
+  clearTokens() {
+    this.token = null;
+    this.refreshToken = null;
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+    }
+  }
+
+  getToken() {
+    return this.token;
+  }
+
+  private getHeaders(): HeadersInit {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    
+    return headers;
+  }
+
+  private async handleResponse<T>(response: Response): Promise<T> {
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new Error(error.message || 'API Error');
+    }
+    return response.json();
+  }
+
+  // ==================== AUTH ENDPOINTS ====================
+
+  async login(email: string, password: string) {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await this.handleResponse<{
+      user: User;
+      accessToken: string;
+      refreshToken: string;
+    }>(response);
+    
+    this.setTokens(data.accessToken, data.refreshToken);
+    return data;
+  }
+
+  async loginWith2FA(email: string, password: string, token: string) {
+    const response = await fetch(`${API_BASE_URL}/auth/login/2fa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, token }),
+    });
+    const data = await this.handleResponse<{
+      user: User;
+      accessToken: string;
+      refreshToken: string;
+    }>(response);
+    
+    this.setTokens(data.accessToken, data.refreshToken);
+    return data;
+  }
+
+  async register(email: string, password: string, roleId: number) {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, roleId }),
+    });
+    return this.handleResponse<{ user: User }>(response);
+  }
+
+  async refreshToken() {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: this.refreshToken }),
+    });
+    const data = await this.handleResponse<{
+      accessToken: string;
+      refreshToken: string;
+    }>(response);
+    
+    this.setTokens(data.accessToken, data.refreshToken);
+    return data;
+  }
+
+  async logout() {
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+      });
+    } finally {
+      this.clearTokens();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
+  }
+
+  async getProfile() {
+    const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<User>(response);
+  }
+
+  // ==================== 2FA ENDPOINTS ====================
+
+  async generate2FA() {
+    const response = await fetch(`${API_BASE_URL}/auth/2fa/generate`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ secret: string; qrCode: string }>(response);
+  }
+
+  async enable2FA(token: string) {
+    const response = await fetch(`${API_BASE_URL}/auth/2fa/enable`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ token }),
+    });
+    return this.handleResponse<{ message: string; backupCodes: string[] }>(response);
+  }
+
+  async disable2FA() {
+    const response = await fetch(`${API_BASE_URL}/auth/2fa/disable`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
+  async get2FAStatus() {
+    const response = await fetch(`${API_BASE_URL}/auth/2fa/status`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ isEnabled: boolean }>(response);
+  }
+
+  async forgotPassword(email: string) {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, newPassword }),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
+  // ==================== USERS ENDPOINTS ====================
+
+  async getUsersV1() {
+    const response = await fetch(`${API_BASE_URL}/v1/users`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<User[]>(response);
+  }
+
+  async getUsersV2(page = 1, limit = 10) {
+    const url = new URL(`${API_BASE_URL}/v2/users`);
+    url.searchParams.append('page', page.toString());
+    url.searchParams.append('limit', limit.toString());
+    
+    const response = await fetch(url.toString(), {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<PaginatedResponse<User>>(response);
+  }
+
+  async getUserStats() {
+    const response = await fetch(`${API_BASE_URL}/v2/users/stats`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<UserStats>(response);
+  }
+
+  async createUser(userData: any) {
+    const response = await fetch(`${API_BASE_URL}/v1/users`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(userData),
+    });
+    return this.handleResponse<User>(response);
+  }
+
+  async updateUser(id: number, userData: any) {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${id}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify(userData),
+    });
+    return this.handleResponse<User>(response);
+  }
+
+  async deleteUser(id: number) {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
+  // ==================== ROLES ENDPOINTS ====================
+
+  async getRoles() {
+    const response = await fetch(`${API_BASE_URL}/v1/roles`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Role[]>(response);
+  }
+
+  async createRole(name: string, permissionIds: number[]) {
+    const response = await fetch(`${API_BASE_URL}/v1/roles`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ name, permissionIds }),
+    });
+    return this.handleResponse<Role>(response);
+  }
+
+  async updateRole(id: number, name: string, permissionIds?: number[]) {
+    const response = await fetch(`${API_BASE_URL}/v1/roles/${id}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ name, permissionIds }),
+    });
+    return this.handleResponse<Role>(response);
+  }
+
+  async deleteRole(id: number) {
+    const response = await fetch(`${API_BASE_URL}/v1/roles/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
+  async getPermissions() {
+    const response = await fetch(`${API_BASE_URL}/v1/permissions`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Permission[]>(response);
+  }
+
+  // ==================== EXPORT ENDPOINTS ====================
+
+  async exportUsers(format: 'excel' | 'pdf' | 'csv' = 'excel') {
+    const response = await fetch(`${API_BASE_URL}/v1/export/users/${format}`, {
+      headers: this.getHeaders(),
+    });
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `users.${format}`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+}
+
+export const api = new ApiService();
+
+
+========== FRONTEND PROXY ==========
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export default function middleware(request: NextRequest) {
+  const token = request.cookies.get('accessToken')?.value;
+  const { pathname } = request.nextUrl;
+
+  // Public routes
+  const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+
+  // If root, redirect to dashboard or login
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL(token ? '/dashboard' : '/login', request.url));
+  }
+
+  // If protected route and no token
+  if (!isPublicRoute && !token) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // If public route and token (already logged in)
+  if (isPublicRoute && token && pathname !== '/') {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+};
+
+
+========== FRONTEND AUTH STORE ==========
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+interface User {
+  id: number;
+  email: string;
+  roleId: number;
+  isActive: boolean;
+}
+
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  setAuth: (user: User, token: string) => void;
+  setUser: (user: User) => void;
+  logout: () => void;
+  setLoading: (loading: boolean) => void;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      isLoading: false,
+      setAuth: (user, token) => set({ user, token }),
+      setUser: (user) => set({ user }),
+      logout: () => {
+        set({ user: null, token: null });
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+      },
+      setLoading: (loading) => set({ isLoading: loading }),
+    }),
+    {
+      name: 'auth-storage',
+      partialize: (state) => ({ user: state.user, token: state.token }),
+    }
+  )
+);
+
+
+========== FRONTEND LOGIN PAGE ==========
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import toast from 'react-hot-toast';
+import { api } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
+
+const loginSchema = z.object({
+  email: z.string().email('Invalid email'),
+  password: z.string().min(6, 'Password too short'),
+});
+
+type LoginForm = z.infer<typeof loginSchema>;
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const setAuth = useAuthStore((state) => state.setAuth);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  const onSubmit = async (data: LoginForm) => {
+    try {
+      setIsLoading(true);
+      const response = await api.login(data.email, data.password);
+      
+      setAuth(response.user, response.accessToken);
+      toast.success('Login successful!');
+      
+      router.push('/dashboard');
+    } catch (error) {
+      toast.error('Invalid email or password');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Sign in to ENTRESAAS
+          </h2>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <label htmlFor="email" className="sr-only">
+                Email
+              </label>
+              <input
+                {...register('email')}
+                type="email"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                placeholder="Email"
+              />
+              {errors.email && (
+                <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+              )}
+            </div>
+            <div>
+              <label htmlFor="password" className="sr-only">
+                Password
+              </label>
+              <input
+                {...register('password')}
+                type="password"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                placeholder="Password"
+              />
+              {errors.password && (
+                <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm">
+              <Link href="/register" className="font-medium text-primary-600 hover:text-primary-500">
+                No account? Register
+              </Link>
+            </div>
+            <div className="text-sm">
+              <Link href="/forgot-password" className="font-medium text-primary-600 hover:text-primary-500">
+                Forgot password?
+              </Link>
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+            >
+              {isLoading ? 'Signing in...' : 'Sign in'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+========== FRONTEND DASHBOARD PAGE ==========
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { api } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
+import { Users, Shield, FileText, Download, User } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+interface Stats {
+  total: number;
+  active: number;
+  inactive: number;
+  byRole: any[];
+}
+
+export default function DashboardPage() {
+  const router = useRouter();
+  const { user, logout } = useAuthStore();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      const data = await api.getUserStats();
+      setStats(data);
+    } catch (error) {
+      toast.error('Error loading statistics');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await api.logout();
+    logout();
+    router.push('/login');
+  };
+
+  const handleExport = async (format: 'excel' | 'pdf' | 'csv') => {
+    try {
+      await api.exportUsers(format);
+      toast.success(`Export ${format} downloaded`);
+    } catch (error) {
+      toast.error('Export failed');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-semibold">ENTRESAAS Dashboard</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Link
+                href="/profile"
+                className="text-gray-700 hover:text-primary-600 flex items-center space-x-1"
+              >
+                <User className="h-4 w-4" />
+                <span>Profile</span>
+              </Link>
+              <span className="text-gray-700">{user?.email}</span>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm text-white bg-red-600 rounded-md hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="shrink-0">
+                  <Users className="h-6 w-6 text-gray-400" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Total Users
+                    </dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {isLoading ? '...' : stats?.total || 0}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="shrink-0">
+                  <Shield className="h-6 w-6 text-gray-400" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Active
+                    </dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {isLoading ? '...' : stats?.active || 0}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="shrink-0">
+                  <FileText className="h-6 w-6 text-gray-400" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Inactive
+                    </dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {isLoading ? '...' : stats?.inactive || 0}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="shrink-0">
+                  <Download className="h-6 w-6 text-gray-400" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <button
+                    onClick={() => handleExport('excel')}
+                    className="text-sm text-primary-600 hover:text-primary-900"
+                  >
+                    Export Excel
+                  </button>
+                  <button
+                    onClick={() => handleExport('pdf')}
+                    className="ml-2 text-sm text-primary-600 hover:text-primary-900"
+                  >
+                    PDF
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mt-8">
+          <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Link
+              href="/users"
+              className="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-12 text-center hover:border-gray-400 focus:outline-none"
+            >
+              <Users className="mx-auto h-12 w-12 text-gray-400" />
+              <span className="mt-2 block text-sm font-medium text-gray-900">
+                Manage Users
+              </span>
+            </Link>
+
+            <Link
+              href="/roles"
+              className="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-12 text-center hover:border-gray-400 focus:outline-none"
+            >
+              <Shield className="mx-auto h-12 w-12 text-gray-400" />
+              <span className="mt-2 block text-sm font-medium text-gray-900">
+                Manage Roles
+              </span>
+            </Link>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+
+========== FRONTEND PACKAGE.JSON ==========
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@tanstack/react-table": "^8.21.3",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.577.0",
+    "next": "16.1.7",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-hook-form": "^7.71.2",
+    "react-hot-toast": "^2.6.0",
+    "recharts": "^3.8.0",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,537 @@
+========== BACKEND ENV ==========
+cat > .env << 'EOF'
+# Server
+PORT=3001
+NODE_ENV=development
+
+# Database
+DATABASE_URL="postgresql://mba-koumba@localhost:5432/entresaas?schema=public"
+
+# JWT
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+JWT_REFRESH_SECRET=your-super-secret-refresh-key-change-this-in-production
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+EOF
+
+========== BACKEND MAIN.TS ==========
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  
+  // Activer le versioning de l'API
+  app.enableVersioning({
+    type: VersioningType.URI,
+    prefix: 'api/v',
+    defaultVersion: '1',
+  });
+  
+  // Global prefix
+  app.setGlobalPrefix('api');
+  
+  // Global validation pipe
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }));
+  
+  // Enable CORS
+  app.enableCors();
+  
+  const configService = app.get(ConfigService);
+  const port = configService.get('PORT', 3000);
+  
+  await app.listen(port);
+  console.log(`Application is running on: http://localhost:${port}/api`);
+  console.log(`API v1: http://localhost:${port}/api/v1`);
+  console.log(`API v2: http://localhost:${port}/api/v2 (coming soon)`);
+}
+
+bootstrap();
+
+
+========== BACKEND APP MODULE ==========
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { CacheModule } from '@nestjs/cache-manager';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
+import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { CommonModule } from './common/common.module'; 
+import { ExportModule } from './modules/export/export.module';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { RolesGuard } from './common/guards/roles.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { ValidationPipe } from './common/pipes/validation.pipe';
+import { AuditInterceptor } from './modules/audit-log/interceptors/audit.interceptor';
+import { validate } from './config/env.validation';
+import { RedisConfig } from './config/redis.config';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      validate,
+      isGlobal: true,
+    }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useClass: RedisConfig,
+    }),
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    RolesModule,
+    PermissionsModule,
+    AuditLogModule,
+    CommonModule,
+    ExportModule,
+  ],
+  controllers: [AppController],
+  providers: [
+    AppService,
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_PIPE,
+      useClass: ValidationPipe,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
+  ],
+})
+export class AppModule {}
+
+
+========== BACKEND AUTH CONTROLLER ==========
+import { Body, Controller, Post, UseGuards, Get } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { TwoFactorService } from './two-factor.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { Enable2FADto } from './dto/enable-2fa.dto';
+import { Verify2FADto } from './dto/verify-2fa.dto';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { RefreshTokenGuard } from './guards/refresh-token.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Public } from '../../common/decorators/public.decorator';
+
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private authService: AuthService,
+    private twoFactorService: TwoFactorService,
+  ) {}
+
+  @Public()
+  @Post('login')
+  async login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('login/2fa')
+  async loginWith2FA(@Body() dto: Verify2FADto) {
+    return this.authService.loginWith2FA(dto.email, dto.password, dto.token);
+  }
+
+  @Public()
+  @Post('register')
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
+  }
+
+  @Public()
+  @Post('refresh')
+  @UseGuards(RefreshTokenGuard)
+  async refreshTokens(@CurrentUser() user: any, @Body() dto: RefreshTokenDto) {
+    return this.authService.refreshTokens(user.userId, dto.refreshToken);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@CurrentUser() user: any) {
+    return this.authService.getProfile(user.userId);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  logout(@CurrentUser() user: any) {
+    return this.authService.logout(user.userId);
+  }
+
+  // 2FA Endpoints
+  @Post('2fa/generate')
+  @UseGuards(JwtAuthGuard)
+  async generate2FA(@CurrentUser() user: any) {
+    return this.twoFactorService.generateTwoFactorSecret(user.userId);
+  }
+
+  @Post('2fa/enable')
+  @UseGuards(JwtAuthGuard)
+  async enable2FA(
+    @CurrentUser() user: any,
+    @Body() dto: Enable2FADto,
+  ) {
+    return this.twoFactorService.enableTwoFactor(user.userId, dto.token);
+  }
+
+  @Post('2fa/disable')
+  @UseGuards(JwtAuthGuard)
+  async disable2FA(@CurrentUser() user: any) {
+    return this.twoFactorService.disableTwoFactor(user.userId);
+  }
+
+  @Get('2fa/status')
+  @UseGuards(JwtAuthGuard)
+  async get2FAStatus(@CurrentUser() user: any) {
+    return this.twoFactorService.get2FAStatus(user.userId);
+  }
+}
+
+
+========== BACKEND AUTH SERVICE ==========
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../../prisma/prisma.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { UsersService } from '../users/users.service';
+import { TwoFactorService } from './two-factor.service';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
+    private usersService: UsersService,
+    private twoFactorService: TwoFactorService,
+  ) {}
+
+  async login(dto: LoginDto) {
+    const user = await this.validateUser(dto.email, dto.password);
+    const tokens = await this.generateTokens(user.id, user.roleId);
+    
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+    
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        roleId: user.roleId,
+      },
+      ...tokens,
+    };
+  }
+
+  async loginWith2FA(email: string, password: string, token: string) {
+    const user = await this.twoFactorService.validateTwoFactorLogin(email, password, token);
+    
+    const tokens = await this.generateTokens(user.id, user.roleId);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+    
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        roleId: user.roleId,
+        isTwoFactorEnabled: user.isTwoFactorEnabled,
+      },
+      ...tokens,
+    };
+  }
+
+  async register(dto: RegisterDto) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('Email already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    
+    const user = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        password: hashedPassword,
+        roleId: dto.roleId,
+        isActive: true,
+      },
+    });
+
+    const tokens = await this.generateTokens(user.id, user.roleId);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        roleId: user.roleId,
+      },
+      ...tokens,
+    };
+  }
+
+  async refreshTokens(userId: number, refreshToken: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.refreshToken) {
+      throw new UnauthorizedException('Access denied');
+    }
+
+    const refreshTokenMatches = await bcrypt.compare(
+      refreshToken,
+      user.refreshToken
+    );
+
+    if (!refreshTokenMatches) {
+      throw new UnauthorizedException('Access denied');
+    }
+
+    const tokens = await this.generateTokens(user.id, user.roleId);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    return tokens;
+  }
+
+  async logout(userId: number) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: null },
+    });
+    
+    return { message: 'Logged out successfully' };
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return { message: 'If email exists, reset link will be sent' };
+    }
+
+    const resetToken = this.jwtService.sign(
+      { sub: user.id },
+      { expiresIn: '1h' },
+    );
+
+    return { 
+      message: 'Reset link sent to email',
+      resetToken,
+    };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    try {
+      const payload = this.jwtService.verify(token);
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      await this.prisma.user.update({
+        where: { id: payload.sub },
+        data: { password: hashedPassword },
+      });
+
+      return { message: 'Password reset successful' };
+    } catch {
+      throw new BadRequestException('Invalid or expired token');
+    }
+  }
+
+  async getProfile(userId: number) {
+    return this.usersService.findOne(userId);
+  }
+
+  private async validateUser(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return user;
+  }
+
+  private async generateTokens(userId: number, roleId: number) {
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(
+        { sub: userId, role: roleId },
+        {
+          secret: this.configService.get('JWT_SECRET'),
+          expiresIn: '15m',
+        },
+      ),
+      this.jwtService.signAsync(
+        { sub: userId, role: roleId },
+        {
+          secret: this.configService.get('JWT_REFRESH_SECRET'),
+          expiresIn: '7d',
+        },
+      ),
+    ]);
+
+    return { accessToken, refreshToken };
+  }
+
+  private async updateRefreshToken(userId: number, refreshToken: string) {
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: hashedRefreshToken },
+    });
+  }
+}
+
+
+========== BACKEND AUTH MODULE ==========
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { ConfigService } from '@nestjs/config';
+import { AuthService } from './auth.service';
+import { TwoFactorService } from './two-factor.service';
+import { AuthController } from './auth.controller';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { RefreshTokenStrategy } from './strategies/refresh.strategy';
+import { UsersModule } from '../users/users.module';
+
+@Module({
+  imports: [
+    UsersModule,
+    PassportModule,
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get('JWT_SECRET'),
+        signOptions: { expiresIn: '15m' },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, TwoFactorService, JwtStrategy, RefreshTokenStrategy],
+  exports: [AuthService, TwoFactorService],
+})
+export class AuthModule {}
+
+
+========== BACKEND PRISMA SERVICE ==========
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  async onModuleInit() {
+    await this.$connect();
+  }
+
+  async onModuleDestroy() {
+    await this.$disconnect();
+  }
+}
+
+========== BACKEND SCHEMA PRISMA ==========
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique
+  password     String
+  refreshToken String?
+  roleId       Int
+  role         Role       @relation(fields: [roleId], references: [id])
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+  twoFactorSecret    String?   // Secret pour 2FA
+  isTwoFactorEnabled Boolean   @default(false)
+}
+
+model Role {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  users       User[]
+  permissions Permission[] @relation("RolePermissions")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Permission {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  roles       Role[]       @relation("RolePermissions")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  ip        String?
+  payload   Json?
+  createdAt DateTime @default(now())
+}

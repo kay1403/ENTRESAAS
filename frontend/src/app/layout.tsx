@@ -3,7 +3,11 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ 
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false, // Évite les problèmes de téléchargement
+})
 
 export const metadata: Metadata = {
   title: 'ENTRESAAS - SaaS Platform',
