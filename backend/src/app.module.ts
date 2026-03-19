@@ -8,10 +8,14 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { RolesModule } from './modules/roles/roles.module';
-import { PermissionsModule } from './modules/permissions/permissions.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { CommonModule } from './common/common.module'; 
 import { ExportModule } from './modules/export/export.module';
+import { LeaveModule } from './modules/leave/leave.module';
+import { TimeModule } from './modules/time/time.module';
+import { ExpenseModule } from './modules/expense/expense.module';
+import { TaskModule } from './modules/task/task.module';
+import { NotificationModule } from './modules/notification/notification.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RolesGuard } from './common/guards/roles.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -34,10 +38,14 @@ import { RedisConfig } from './config/redis.config';
     AuthModule,
     UsersModule,
     RolesModule,
-    PermissionsModule,
     AuditLogModule,
     CommonModule,
     ExportModule,
+    LeaveModule,
+    TimeModule,
+    ExpenseModule,
+    TaskModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [

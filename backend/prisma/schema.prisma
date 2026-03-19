@@ -1,4 +1,3 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,44 +7,716 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==================== ENUMS ====================
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ExpenseClaimStatus {
+  SUBMITTED
+  MANAGER_APPROVED
+  FINANCE_APPROVED
+  PAID
+  REJECTED
+}
+
+enum TimeEntryType {
+  CHECK_IN
+  CHECK_OUT
+  BREAK_START
+  BREAK_END
+  REMOTE
+}
+
+enum WorkStatus {
+  NORMAL
+  LATE
+  ABSENT
+  OVERTIME
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationPriority {
+  INFO
+  IMPORTANT
+  URGENT
+}
+
+enum DocumentSensitivity {
+  PUBLIC
+  SENSITIVE
+  CONFIDENTIAL
+}
+
+enum Currency {
+  RWF
+  USD
+  EUR
+  GBP
+}
+
+// ==================== MODULE MULTI-TENANT ====================
+
+model Company {
+  id      Int     @id @default(autoincrement())
+  name    String  @unique
+  taxId   String? @unique
+  email   String?
+  phone   String?
+  address String?
+  logo    String?
+  website String?
+
+  // Configuration
+  dateFormat String   @default("DD/MM/YYYY")
+  timezone   String   @default("Africa/Kigali")
+  currency   Currency @default(RWF)
+
+  // Relations
+  users             User[]
+  departments       Department[]
+  roles             Role[]
+  leavePolicies     LeavePolicy[]
+  expensePolicies   ExpensePolicy[]
+  documents         Document[]
+  auditLogs         AuditLog[]
+  leaveTypes        LeaveType[]
+  leaveRequests     LeaveRequest[]
+  timeEntries       TimeEntry[]
+  workSummaries     DailyWorkSummary[]
+  expenseCategories ExpenseCategory[]
+  expenseClaims     ExpenseClaim[]
+  documentTypes     DocumentType[]
+  tasks             Task[]
+  notifications     Notification[]
+  messages          Message[]
+  employeeInfos     EmployeeInfo[]
+
+  // Soft delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Department {
+  id          Int     @id @default(autoincrement())
+  companyId   Int
+  company     Company @relation(fields: [companyId], references: [id])
+  name        String
+  description String?
+
+  // Chef de département (relation vers User)
+  managerId Int?
+  manager   User? @relation("DepartmentManager", fields: [managerId], references: [id])
+
+  // Relations
+  employees EmployeeInfo[]
+  messages  Message[] // ← Ajout de la relation inverse pour Message
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([companyId, name])
+}
+
+// ==================== AUTH & UTILISATEURS ====================
+
 model User {
-  id           Int        @id @default(autoincrement())
-  email        String     @unique
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  email        String  @unique
   password     String
   refreshToken String?
-  roleId       Int
-  role         Role       @relation(fields: [roleId], references: [id])
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  auditLogs    AuditLog[]
-  twoFactorSecret    String?   // Secret pour 2FA
+
+  roleId Int
+  role   Role @relation(fields: [roleId], references: [id])
+
+  // Sécurité
+  twoFactorSecret    String?
   isTwoFactorEnabled Boolean   @default(false)
+  loginAttempts      Int       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+  passwordChangedAt  DateTime?
+
+  isActive Boolean @default(true)
+
+  // Relations RH
+  employeeInfo  EmployeeInfo?
+  leaveRequests LeaveRequest[]
+  leaveBalances LeaveBalance[]
+  timeEntries   TimeEntry[]
+  workSummaries DailyWorkSummary[]
+  expenseClaims ExpenseClaim[]
+  documents     Document[]
+
+  // Tâches
+  assignedTasks TaskAssignment[]
+  createdTasks  Task[]           @relation("TaskCreator")
+  taskComments  TaskComment[]
+
+  // Notifications
+  notifications Notification[]
+
+  // Messages
+  sentMessages     Message[]          @relation("MessageSender")
+  receivedMessages MessageRecipient[]
+
+  // Relations de management
+  managedEmployees   EmployeeInfo[] @relation("EmployeeManager")
+  managedDepartments Department[]   @relation("DepartmentManager") // ← Ajout de la relation inverse pour Department.manager
+
+  // Approbations
+  approvedLeaveRequests LeaveRequest[] @relation("LeaveRequestApprovedBy")
+  rejectedLeaveRequests LeaveRequest[] @relation("LeaveRequestRejectedBy")
+  approvedExpenseClaims ExpenseClaim[] @relation("ExpenseApprovedBy")
+  completedTasks        Task[]         @relation("TaskCompleter")
+
+  // Audit
+  auditLogs AuditLog[]
+
+  // Soft delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Role {
-  id          Int          @id @default(autoincrement())
-  name        String       @unique
-  users       User[]
-  permissions Permission[] @relation("RolePermissions")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name        String
+  description String?
+  permissions Json // Stockage des permissions sous forme de JSON
+  isSystem    Boolean @default(false) // Rôle système (ne peut être supprimé)
+
+  users User[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([companyId, name])
 }
 
-model Permission {
-  id          Int          @id @default(autoincrement())
-  name        String       @unique
-  roles       Role[]       @relation("RolePermissions")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+// ==================== MODULE EMPLOYÉS ====================
+
+model EmployeeInfo {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  // Informations personnelles
+  firstName String
+  lastName  String
+  phone     String?
+  address   String?
+  birthDate DateTime?
+
+  // Informations professionnelles
+  employeeId      String      @unique
+  departmentId    Int?
+  department      Department? @relation(fields: [departmentId], references: [id])
+  position        String?
+  hireDate        DateTime
+  terminationDate DateTime?
+
+  // Gestion du manager
+  managerId Int? // ID du manager
+  manager   User? @relation("EmployeeManager", fields: [managerId], references: [id])
+
+  // Statut
+  status EmployeeStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 }
+
+// ==================== MODULE CONGÉS ====================
+
+model LeaveType {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name               String // ANNUAL, SICK, MATERNITY, etc.
+  description        String?
+  daysPerYear        Float? // null = illimité
+  requiresValidation Boolean @default(true)
+  minDays            Float   @default(1)
+  maxDays            Float? // null = illimité
+  paid               Boolean @default(true)
+  color              String  @default("#3b82f6")
+  isActive           Boolean @default(true)
+
+  requests LeaveRequest[]
+  balances LeaveBalance[]
+  policies LeavePolicy[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([companyId, name])
+}
+
+model LeavePolicy {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name        String
+  description String?
+
+  // Règles
+  maxConsecutiveDays Int? // Jours consécutifs maximum
+  minDaysBeforeLeave Int? // Délai minimum avant départ
+  maxPendingRequests Int? // Demandes en attente maximum
+  requiresAttachment Boolean @default(false)
+  approvalLevels     Int     @default(1) // 1 = manager, 2 = manager+rh
+
+  // Jours fériés (stockés en JSON)
+  holidays Json?
+
+  leaveTypeId Int
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model LeaveBalance {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  leaveTypeId Int
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  year        Int   @default(2026)
+  totalDays   Float // Jours accordés
+  usedDays    Float @default(0)
+  pendingDays Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, leaveTypeId, year])
+  @@index([userId, year])
+}
+
+model LeaveRequest {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  leaveTypeId Int
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  startDate     DateTime
+  endDate       DateTime
+  daysCount     Float // Calculé automatiquement
+  reason        String?
+  attachmentUrl String? // Justificatif (pour maladie)
+
+  status   LeaveRequestStatus @default(PENDING)
+  comments String?
+
+  // Workflow
+  currentLevel    Int       @default(1)
+  approvedById    Int?
+  approvedBy      User?     @relation("LeaveRequestApprovedBy", fields: [approvedById], references: [id])
+  approvedAt      DateTime?
+  rejectedById    Int?
+  rejectedBy      User?     @relation("LeaveRequestRejectedBy", fields: [rejectedById], references: [id])
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  // Conflits détectés (stockés en JSON)
+  conflicts Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId, status])
+  @@index([startDate, endDate])
+  @@index([companyId, status, createdAt])
+}
+
+// ==================== MODULE POINTAGE ====================
+
+model TimeEntry {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  type      TimeEntryType
+  timestamp DateTime      @default(now())
+  location  String? // IP ou coordonnées GPS
+  note      String?
+  workDate  DateTime      @map("work_date") // Date sans heure
+
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  @@unique([userId, timestamp])
+  @@index([userId, workDate])
+  @@index([companyId, workDate])
+}
+
+model DailyWorkSummary {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  userId Int
+  user   User     @relation(fields: [userId], references: [id])
+  date   DateTime @unique @map("work_date")
+
+  firstEntry        DateTime?
+  lastEntry         DateTime?
+  totalWorkMinutes  Int       @default(0)
+  totalBreakMinutes Int       @default(0)
+
+  status          WorkStatus @default(NORMAL)
+  lateMinutes     Int        @default(0)
+  overtimeMinutes Int        @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([companyId, date])
+}
+
+// ==================== MODULE NOTES DE FRAIS ====================
+
+model ExpenseCategory {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name            String // TRANSPORT, MEAL, HOTEL, etc.
+  description     String?
+  dailyCap        Float? // Plafond journalier (null = illimité)
+  requiresReceipt Boolean @default(true)
+  isActive        Boolean @default(true)
+
+  expenses ExpenseClaim[]
+  policies ExpensePolicy[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([companyId, name])
+}
+
+model ExpensePolicy {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name        String
+  description String?
+
+  categoryId Int
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id])
+
+  maxAmount           Float? // Montant maximum par dépense
+  requiresPreApproval Boolean @default(false)
+  approvalLevels      Int     @default(1)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model ExpenseClaim {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  userId     Int
+  user       User            @relation(fields: [userId], references: [id])
+  categoryId Int
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id])
+
+  amount      Float
+  currency    Currency @default(RWF)
+  date        DateTime // Date de la dépense
+  description String
+  receiptUrl  String? // URL du justificatif
+  receiptKey  String? // Clé dans le bucket S3
+
+  status   ExpenseClaimStatus @default(SUBMITTED)
+  comments String?
+
+  // Workflow
+  currentLevel    Int       @default(1)
+  approvedById    Int?
+  approvedBy      User?     @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  rejectionReason String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId, status])
+  @@index([companyId, status, createdAt])
+}
+
+// ==================== MODULE DOCUMENTS ====================
+
+model DocumentType {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name            String // CONTRACT, PAYSLIP, CERTIFICATE, etc.
+  description     String?
+  sensitivity     DocumentSensitivity @default(PUBLIC)
+  retentionMonths Int? // Durée de conservation (null = illimité)
+
+  documents Document[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([companyId, name])
+}
+
+model Document {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  userId Int
+  user   User         @relation(fields: [userId], references: [id])
+  typeId Int
+  type   DocumentType @relation(fields: [typeId], references: [id])
+
+  title       String
+  fileName    String
+  fileKey     String // Clé dans le bucket (S3, GCP, etc.)
+  fileUrl     String // URL signée
+  fileSize    Int // en bytes
+  mimeType    String
+  description String?
+
+  // Métadonnées
+  version  Int     @default(1)
+  isLatest Boolean @default(true)
+
+  // Expiration
+  expiresAt  DateTime?
+  notifiedAt DateTime? // Dernière notification d'expiration
+
+  // Visibilité
+  sensitivity DocumentSensitivity @default(PUBLIC)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId, typeId])
+  @@index([expiresAt])
+  @@index([companyId, createdAt])
+}
+
+// ==================== MODULE TÂCHES ====================
+
+model Task {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  title       String
+  description String?
+
+  createdById Int
+  createdBy   User @relation("TaskCreator", fields: [createdById], references: [id])
+
+  status   TaskStatus   @default(TODO)
+  priority TaskPriority @default(MEDIUM)
+
+  dueDate       DateTime?
+  completedAt   DateTime?
+  completedById Int?
+  completedBy   User?     @relation("TaskCompleter", fields: [completedById], references: [id])
+
+  assignments TaskAssignment[]
+  comments    TaskComment[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([companyId, status, priority])
+  @@index([dueDate])
+}
+
+model TaskAssignment {
+  id     Int  @id @default(autoincrement())
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id])
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, userId])
+}
+
+model TaskComment {
+  id     Int  @id @default(autoincrement())
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id])
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  content     String
+  attachments Json? // URLs des pièces jointes
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+// ==================== MODULE NOTIFICATIONS ====================
+
+model Notification {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  type     String // LEAVE_APPROVED, EXPENSE_PAID, etc.
+  title    String
+  message  String
+  link     String? // Lien vers la ressource
+  priority NotificationPriority @default(INFO)
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  data Json? // Données supplémentaires
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([companyId, createdAt])
+}
+
+// ==================== MODULE MESSAGERIE ====================
+
+model Message {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  senderId Int
+  sender   User @relation("MessageSender", fields: [senderId], references: [id])
+
+  subject      String?
+  content      String
+  priority     NotificationPriority @default(INFO)
+  isTeam       Boolean              @default(false)
+  departmentId Int? // null = toute l'entreprise
+  department   Department?          @relation(fields: [departmentId], references: [id]) // ← Relation vers Department
+
+  recipients  MessageRecipient[]
+  attachments Json? // URLs des pièces jointes
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model MessageRecipient {
+  id        Int     @id @default(autoincrement())
+  messageId Int
+  message   Message @relation(fields: [messageId], references: [id])
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id])
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  @@unique([messageId, userId])
+}
+
+// ==================== MODULE AUDIT ====================
 
 model AuditLog {
-  id        Int      @id @default(autoincrement())
-  action    String
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id])
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id])
+
+  action     String // CREATE, UPDATE, DELETE, LOGIN, etc.
+  entityType String // User, LeaveRequest, ExpenseClaim, etc.
+  entityId   Int? // ID de l'entité concernée
+
+  oldData Json? // Anciennes valeurs (pour UPDATE)
+  newData Json? // Nouvelles valeurs
+
   ip        String?
-  payload   Json?
+  userAgent String?
+
+  metadata Json? // Données supplémentaires
+
   createdAt DateTime @default(now())
+
+  @@index([companyId, entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
 }

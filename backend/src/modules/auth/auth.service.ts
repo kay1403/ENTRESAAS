@@ -20,15 +20,25 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const user = await this.validateUser(dto.email, dto.password);
-    const tokens = await this.generateTokens(user.id, user.roleId);
+    const tokens = await this.generateTokens(user.id, user.roleId, user.companyId);
     
     await this.updateRefreshToken(user.id, tokens.refreshToken);
     
+    // Mettre à jour la dernière connexion
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+        lastLoginIp: 'unknown', // À remplacer par l'IP réelle
+      },
+    });
+
     return {
       user: {
         id: user.id,
         email: user.email,
         roleId: user.roleId,
+        companyId: user.companyId,
       },
       ...tokens,
     };
@@ -37,7 +47,7 @@ export class AuthService {
   async loginWith2FA(email: string, password: string, token: string) {
     const user = await this.twoFactorService.validateTwoFactorLogin(email, password, token);
     
-    const tokens = await this.generateTokens(user.id, user.roleId);
+    const tokens = await this.generateTokens(user.id, user.roleId, user.companyId);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
     
     return {
@@ -45,6 +55,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         roleId: user.roleId,
+        companyId: user.companyId,
         isTwoFactorEnabled: user.isTwoFactorEnabled,
       },
       ...tokens,
@@ -52,6 +63,13 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
+    // Récupérer l'entreprise par défaut (à modifier selon votre logique)
+    const company = await this.prisma.company.findFirst();
+    
+    if (!company) {
+      throw new BadRequestException('No company found');
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -67,11 +85,12 @@ export class AuthService {
         email: dto.email,
         password: hashedPassword,
         roleId: dto.roleId,
+        companyId: company.id,
         isActive: true,
       },
     });
 
-    const tokens = await this.generateTokens(user.id, user.roleId);
+    const tokens = await this.generateTokens(user.id, user.roleId, user.companyId);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return {
@@ -79,6 +98,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         roleId: user.roleId,
+        companyId: user.companyId,
       },
       ...tokens,
     };
@@ -102,7 +122,7 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    const tokens = await this.generateTokens(user.id, user.roleId);
+    const tokens = await this.generateTokens(user.id, user.roleId, user.companyId);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
@@ -144,7 +164,7 @@ export class AuthService {
 
       await this.prisma.user.update({
         where: { id: payload.sub },
-        data: { password: hashedPassword },
+        data: { password: hashedPassword, passwordChangedAt: new Date() },
       });
 
       return { message: 'Password reset successful' };
@@ -160,31 +180,51 @@ export class AuthService {
   private async validateUser(email: string, password: string) {
     const user = await this.prisma.user.findUnique({
       where: { email },
+      include: { role: true },
     });
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Vérifier si le compte est verrouillé
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      throw new UnauthorizedException('Account is locked');
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      // Incrémenter les tentatives
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          loginAttempts: { increment: 1 },
+          ...(user.loginAttempts >= 4 ? { lockedUntil: new Date(Date.now() + 15 * 60000) } : {}),
+        },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    // Réinitialiser les tentatives
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { loginAttempts: 0, lockedUntil: null },
+    });
 
     return user;
   }
 
-  private async generateTokens(userId: number, roleId: number) {
+  private async generateTokens(userId: number, roleId: number, companyId: number) {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(
-        { sub: userId, role: roleId },
+        { sub: userId, role: roleId, companyId },
         {
           secret: this.configService.get('JWT_SECRET'),
           expiresIn: '15m',
         },
       ),
       this.jwtService.signAsync(
-        { sub: userId, role: roleId },
+        { sub: userId, role: roleId, companyId },
         {
           secret: this.configService.get('JWT_REFRESH_SECRET'),
           expiresIn: '7d',

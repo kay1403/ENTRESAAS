@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Version } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentCompany } from '../../common/decorators/company.decorator';
 
 @Controller({
   path: 'users',
@@ -16,8 +17,8 @@ export class UsersControllerV1 {
 
   @Get()
   @Roles('ADMIN')
-  findAll() {
-    return this.service.findAll();
+  findAll(@CurrentCompany() companyId: number) {
+    return this.service.findAll(companyId);
   }
 
   @Get(':id')
@@ -28,19 +29,23 @@ export class UsersControllerV1 {
 
   @Post()
   @Roles('ADMIN')
-  create(@Body() dto: CreateUserDto) {
-    return this.service.createUser(dto);
+  create(@Body() dto: CreateUserDto, @CurrentCompany() companyId: number) {
+    return this.service.createUser(dto, companyId);
   }
 
   @Patch(':id')
   @Roles('ADMIN')
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.service.updateUser(+id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentCompany() companyId: number,
+  ) {
+    return this.service.updateUser(+id, dto, companyId);
   }
 
   @Delete(':id')
   @Roles('ADMIN')
-  remove(@Param('id') id: string) {
-    return this.service.deleteUser(+id);
+  remove(@Param('id') id: string, @CurrentCompany() companyId: number) {
+    return this.service.deleteUser(+id, companyId);
   }
 }

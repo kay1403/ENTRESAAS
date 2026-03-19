@@ -12,7 +12,7 @@ export class UsersService {
     private cacheService: CacheService,
   ) {}
 
-  async createUser(dto: CreateUserDto) {
+  async createUser(dto: CreateUserDto, companyId: number) {
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     
     const user = await this.prisma.user.create({
@@ -20,6 +20,7 @@ export class UsersService {
         email: dto.email,
         password: hashedPassword,
         roleId: dto.roleId,
+        companyId,
         isActive: dto.isActive,
       },
     });
@@ -29,8 +30,15 @@ export class UsersService {
     return user;
   }
 
-  async updateUser(id: number, dto: UpdateUserDto) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+  async updateUser(id: number, dto: UpdateUserDto, companyId: number) {
+    const user = await this.prisma.user.findFirst({ 
+      where: { 
+        id,
+        companyId,
+        deletedAt: null,
+      } 
+    });
+    
     if (!user) throw new NotFoundException('User not found');
 
     const data: any = { ...dto };
@@ -47,17 +55,30 @@ export class UsersService {
     return updatedUser;
   }
 
-  async deleteUser(id: number) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+  async deleteUser(id: number, companyId: number) {
+    const user = await this.prisma.user.findFirst({ 
+      where: { 
+        id,
+        companyId,
+        deletedAt: null,
+      } 
+    });
+    
     if (!user) throw new NotFoundException('User not found');
     
-    await this.prisma.user.delete({ where: { id } });
+    // Soft delete
+    await this.prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     
     await this.cacheService.clearUsersCache();
     await this.cacheService.del(`users:${id}`);
+    
+    return { message: 'User deleted successfully' };
   }
 
-  async findAll() {
+  async findAll(companyId: number) {
     const cached = await this.cacheService.getUsers();
     if (cached) {
       console.log('📦 Données servies depuis le cache');
@@ -66,7 +87,17 @@ export class UsersService {
 
     console.log('🔄 Données servies depuis la base de données');
     const users = await this.prisma.user.findMany({
-      select: { id: true, email: true, roleId: true, isActive: true },
+      where: { 
+        companyId,
+        deletedAt: null,
+      },
+      select: { 
+        id: true, 
+        email: true, 
+        roleId: true, 
+        isActive: true,
+        createdAt: true,
+      },
     });
 
     await this.cacheService.setUsers(users);
@@ -77,13 +108,20 @@ export class UsersService {
   async findOne(id: number) {
     const cached = await this.cacheService.getUserById(id);
     if (cached) {
-      console.log(`�� User ${id} servi depuis le cache`);
+      console.log(`📦 User ${id} servi depuis le cache`);
       return cached;
     }
 
     console.log(`🔄 User ${id} servi depuis la base de données`);
-    const user = await this.prisma.user.findUnique({ 
-      where: { id } 
+    const user = await this.prisma.user.findFirst({ 
+      where: { 
+        id,
+        deletedAt: null,
+      },
+      include: {
+        role: true,
+        employeeInfo: true,
+      },
     });
     
     if (!user) throw new NotFoundException('User not found');
@@ -93,15 +131,21 @@ export class UsersService {
     return user;
   }
 
-  async getUserStatsByRole() {
+  async getUserStatsByRole(companyId: number) {
     const users = await this.prisma.user.groupBy({
       by: ['roleId'],
+      where: { 
+        companyId,
+        deletedAt: null,
+      },
       _count: {
         id: true,
       },
     });
 
-    const roles = await this.prisma.role.findMany();
+    const roles = await this.prisma.role.findMany({
+      where: { companyId },
+    });
     
     return users.map(stat => ({
       roleId: stat.roleId,

@@ -1,16 +1,39 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateLogDto } from './dto/create-log.dto';
 
 @Injectable()
 export class AuditLogService {
   constructor(private prisma: PrismaService) {}
 
-  createLog(dto: CreateLogDto) {
-    return this.prisma.auditLog.create({ data: dto });
+  createLog(data: {
+    action: string;
+    userId: number;
+    companyId: number;
+    entityType: string;
+    entityId?: number;
+    oldData?: any;
+    newData?: any;
+    ip?: string;
+  }) {
+    return this.prisma.auditLog.create({
+      data: {
+        action: data.action,
+        userId: data.userId,
+        companyId: data.companyId,
+        entityType: data.entityType,
+        entityId: data.entityId,
+        oldData: data.oldData,
+        newData: data.newData,
+        ip: data.ip,
+      },
+    });
   }
 
-  findAll() {
-    return this.prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' } });
+  findAll(companyId: number) {
+    return this.prisma.auditLog.findMany({
+      where: { companyId },
+      include: { user: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }

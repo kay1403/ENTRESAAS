@@ -1,4 +1,3 @@
-// src/modules/auth/guards/refresh-token.guard.ts
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -23,10 +22,10 @@ export class RefreshTokenGuard implements CanActivate {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
       });
       
-      // IMPORTANT: Mettre le userId dans request.user
       request.user = { 
-        userId: payload.sub,  // Le sub est l'userId
-        role: payload.role 
+        userId: payload.sub,
+        role: payload.role,
+        companyId: payload.companyId 
       };
       
       return true;

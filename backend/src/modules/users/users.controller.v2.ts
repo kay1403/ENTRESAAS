@@ -7,6 +7,8 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentCompany } from '../../common/decorators/company.decorator';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Controller({
   path: 'users',
@@ -14,12 +16,18 @@ import { Roles } from '../../common/decorators/roles.decorator';
 })
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersControllerV2 {
-  constructor(private service: UsersService) {}
+  constructor(
+    private service: UsersService,
+    private prisma: PrismaService,
+  ) {}
 
   @Get()
   @Roles('ADMIN')
-  async findAll(@Query() pagination: PaginationDto) {
-    const users = await this.service.findAll();
+  async findAll(
+    @Query() pagination: PaginationDto,
+    @CurrentCompany() companyId: number,
+  ) {
+    const users = await this.service.findAll(companyId);
     
     const page = pagination.page || 1;
     const limit = pagination.limit || 10;
@@ -29,7 +37,9 @@ export class UsersControllerV2 {
     const paginatedUsers = users.slice(start, end);
     
     // Récupérer les rôles pour avoir les noms
-    const roles = await this.prisma.role.findMany();
+    const roles = await this.prisma.role.findMany({
+      where: { companyId },
+    });
     
     return {
       data: paginatedUsers.map(user => {
@@ -54,9 +64,9 @@ export class UsersControllerV2 {
 
   @Get('stats')
   @Roles('ADMIN')
-  async getStats() {
-    const users = await this.service.findAll();
-    const statsByRole = await this.service.getUserStatsByRole();
+  async getStats(@CurrentCompany() companyId: number) {
+    const users = await this.service.findAll(companyId);
+    const statsByRole = await this.service.getUserStatsByRole(companyId);
     
     return {
       total: users.length,
@@ -74,16 +84,11 @@ export class UsersControllerV2 {
       throw new NotFoundException(`Utilisateur avec ID ${id} non trouvé`);
     }
     
-    // Récupérer le rôle pour avoir le nom
-    const role = await this.prisma.role.findUnique({
-      where: { id: user.roleId }
-    });
-    
     return new UserResponseDto({
       id: user.id,
       email: user.email,
       roleId: user.roleId,
-      roleName: role?.name,
+      roleName: user.role?.name,
       isActive: user.isActive,
       createdAt: user.createdAt,
     });
@@ -91,12 +96,15 @@ export class UsersControllerV2 {
 
   @Post()
   @Roles('ADMIN')
-  async create(@Body() dto: CreateUserDto) {
-    const user = await this.service.createUser(dto);
+  async create(
+    @Body() dto: CreateUserDto,
+    @CurrentCompany() companyId: number,
+  ) {
+    const user = await this.service.createUser(dto, companyId);
     
     // Récupérer le rôle pour avoir le nom
     const role = await this.prisma.role.findUnique({
-      where: { id: user.roleId }
+      where: { id: user.roleId },
     });
     
     return new UserResponseDto({
@@ -111,12 +119,16 @@ export class UsersControllerV2 {
 
   @Patch(':id')
   @Roles('ADMIN')
-  async update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    const user = await this.service.updateUser(+id, dto);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentCompany() companyId: number,
+  ) {
+    const user = await this.service.updateUser(+id, dto, companyId);
     
     // Récupérer le rôle pour avoir le nom
     const role = await this.prisma.role.findUnique({
-      where: { id: user.roleId }
+      where: { id: user.roleId },
     });
     
     return new UserResponseDto({
@@ -131,12 +143,7 @@ export class UsersControllerV2 {
 
   @Delete(':id')
   @Roles('ADMIN')
-  remove(@Param('id') id: string) {
-    return this.service.deleteUser(+id);
-  }
-
-  // Ajouter une référence à PrismaService
-  private get prisma() {
-    return (this.service as any).prisma;
+  remove(@Param('id') id: string, @CurrentCompany() companyId: number) {
+    return this.service.deleteUser(+id, companyId);
   }
 }

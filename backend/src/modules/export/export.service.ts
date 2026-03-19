@@ -37,15 +37,19 @@ export class ExportService {
       case ExportEntity.USERS:
         return this.prisma.user.findMany({
           where,
-          include: { role: true },
+          include: { 
+            role: true,
+            employeeInfo: true,
+          },
         });
       case ExportEntity.ROLES:
         return this.prisma.role.findMany({
           where,
-          include: { permissions: true },
+          // Les permissions sont stockées en JSON, pas besoin d'include
         });
       case ExportEntity.PERMISSIONS:
-        return this.prisma.permission.findMany({ where });
+        // Les permissions n'existent plus en tant que table
+        throw new BadRequestException('Permissions export not available in new schema');
       case ExportEntity.AUDIT_LOGS:
         return this.prisma.auditLog.findMany({
           where,
@@ -155,24 +159,23 @@ export class ExportService {
         { header: 'ID', key: 'id' },
         { header: 'Email', key: 'email' },
         { header: 'Rôle', key: 'role.name' },
+        { header: 'Prénom', key: 'employeeInfo.firstName' },
+        { header: 'Nom', key: 'employeeInfo.lastName' },
+        { header: 'Département', key: 'employeeInfo.departmentId' },
         { header: 'Actif', key: 'isActive' },
         { header: 'Créé le', key: 'createdAt' },
       ],
       [ExportEntity.ROLES]: [
         { header: 'ID', key: 'id' },
         { header: 'Nom', key: 'name' },
-        { header: 'Permissions', key: 'permissions' },
-        { header: 'Créé le', key: 'createdAt' },
-      ],
-      [ExportEntity.PERMISSIONS]: [
-        { header: 'ID', key: 'id' },
-        { header: 'Nom', key: 'name' },
+        { header: 'Description', key: 'description' },
         { header: 'Créé le', key: 'createdAt' },
       ],
       [ExportEntity.AUDIT_LOGS]: [
         { header: 'ID', key: 'id' },
         { header: 'Action', key: 'action' },
         { header: 'Utilisateur', key: 'user.email' },
+        { header: 'Type', key: 'entityType' },
         { header: 'IP', key: 'ip' },
         { header: 'Date', key: 'createdAt' },
       ],

@@ -13,11 +13,14 @@ export class AuditInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(() => {
         if (user) {
+          const { method, url, ip, body } = request;
           this.auditLogService.createLog({
-            action: `${request.method} ${request.url}`,
+            action: `${method} ${url}`,
             userId: user.userId,
-            ip: request.ip,
-            payload: request.body,
+            companyId: user.companyId,
+            entityType: url.split('/')[2] || 'unknown',
+            newData: body,
+            ip: ip,
           });
         }
       }),

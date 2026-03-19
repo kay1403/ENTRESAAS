@@ -1,4 +1,4 @@
-import { IsString, IsArray, ArrayNotEmpty, IsOptional, IsInt } from 'class-validator';
+import { IsString, IsOptional, IsObject } from 'class-validator';
 
 export class UpdateRoleDto {
   @IsOptional()
@@ -6,8 +6,10 @@ export class UpdateRoleDto {
   name?: string;
 
   @IsOptional()
-  @IsArray()
-  @ArrayNotEmpty()
-  @IsInt({ each: true })
-  permissionIds?: number[];
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsObject()
+  permissions?: Record<string, any>;
 }

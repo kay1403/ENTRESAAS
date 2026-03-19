@@ -9,7 +9,7 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('api');
   
-  // Activer le versioning de l'API - SANS PREFIX
+  // Activer le versioning de l'API
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: '1', // Routes: /api/v1/auth/login
