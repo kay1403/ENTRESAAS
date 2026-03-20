@@ -23,6 +23,7 @@ import { ValidationPipe } from './common/pipes/validation.pipe';
 import { AuditInterceptor } from './modules/audit-log/interceptors/audit.interceptor';
 import { validate } from './config/env.validation';
 import { RedisConfig } from './config/redis.config';
+import { DepartmentsModule } from './modules/departments/departments.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { RedisConfig } from './config/redis.config';
     ExpenseModule,
     TaskModule,
     NotificationModule,
+    DepartmentsModule,
   ],
   controllers: [AppController],
   providers: [
