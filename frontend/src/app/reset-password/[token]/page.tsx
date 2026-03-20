@@ -56,7 +56,7 @@ export default function ResetPasswordPage() {
           </p>
           <Link
             href="/login"
-            className="text-primary-600 hover:text-primary-500 font-medium"
+            className="text-blue-600 hover:text-blue-500 font-medium"
           >
             Go to login
           </Link>
@@ -85,7 +85,7 @@ export default function ResetPasswordPage() {
               <input
                 {...register('newPassword')}
                 type="password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="••••••••"
               />
               {errors.newPassword && (
@@ -100,7 +100,7 @@ export default function ResetPasswordPage() {
               <input
                 {...register('confirmPassword')}
                 type="password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="••••••••"
               />
               {errors.confirmPassword && (
@@ -113,7 +113,7 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
             >
               {isLoading ? 'Resetting...' : 'Reset password'}
             </button>

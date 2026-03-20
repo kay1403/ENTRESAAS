@@ -82,7 +82,7 @@ export default function UserDetailsPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary-600 border-r-transparent"></div>
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
           <p className="mt-4 text-gray-600">Loading user details...</p>
         </div>
       </div>
@@ -135,14 +135,14 @@ export default function UserDetailsPage() {
         {/* User Info Card */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {/* Header */}
-          <div className="px-6 py-4 bg-gradient-to-r from-primary-600 to-primary-700">
+          <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
             <div className="flex items-center space-x-4">
               <div className="h-16 w-16 rounded-full bg-white flex items-center justify-center">
-                <UserIcon className="h-8 w-8 text-primary-600" />
+                <UserIcon className="h-8 w-8 text-blue-600" />
               </div>
               <div>
                 <h2 className="text-xl font-bold text-white">{user.email}</h2>
-                <p className="text-primary-100">User ID: {user.id}</p>
+                <p className="text-blue-100">User ID: {user.id}</p>
               </div>
             </div>
           </div>
@@ -160,7 +160,7 @@ export default function UserDetailsPage() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                     required
                   />
                 </div>
@@ -172,7 +172,7 @@ export default function UserDetailsPage() {
                   <select
                     value={formData.roleId}
                     onChange={(e) => setFormData({ ...formData, roleId: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                   >
                     {roles.map((role) => (
                       <option key={role.id} value={role.id}>
@@ -188,7 +188,7 @@ export default function UserDetailsPage() {
                     id="isActive"
                     checked={formData.isActive}
                     onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
                   <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
                     Active Account
@@ -198,7 +198,7 @@ export default function UserDetailsPage() {
                 <div className="flex space-x-3 pt-4">
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                   >
                     Save Changes
                   </button>

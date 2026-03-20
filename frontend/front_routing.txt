@@ -1,13 +1,14 @@
+=== NEXT.JS APP ROUTING ===
+-e \n--- FILE: src/app/layout.tsx ---
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
-import { ThemeProvider } from '@/components/ThemeProvider'
-import AuthGuard from '@/components/AuthGuard'
 
 const inter = Inter({ 
   subsets: ['latin'],
   display: 'swap',
+  preload: false, // Évite les problèmes de téléchargement
 })
 
 export const metadata: Metadata = {
@@ -21,20 +22,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body className={inter.className}>
-        <ThemeProvider>
-          <AuthGuard>
-            {children}
-          </AuthGuard>
-          <Toaster 
-            position="top-right"
-            toastOptions={{
-              className: 'dark:bg-gray-800 dark:text-white',
-              duration: 3000,
-            }}
-          />
-        </ThemeProvider>
+        {children}
+        <Toaster position="top-right" />
       </body>
     </html>
   )

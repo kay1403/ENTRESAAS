@@ -109,7 +109,7 @@ export default function SettingsPage() {
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
             <div className="flex items-center space-x-3">
-              <Shield className="h-6 w-6 text-primary-600" />
+              <Shield className="h-6 w-6 text-blue-600" />
               <h2 className="text-lg font-medium text-gray-900">Two-Factor Authentication</h2>
             </div>
           </div>
@@ -135,7 +135,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleEnable2FA}
                 disabled={isLoading}
-                className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
               >
                 {isLoading ? 'Generating...' : 'Enable 2FA'}
               </button>
@@ -177,7 +177,7 @@ export default function SettingsPage() {
                   onChange={(e) => setVerificationToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
                   maxLength={6}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600 text-center text-2xl tracking-widest"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-center text-2xl tracking-widest"
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   Enter the 6-digit code from your authenticator app
@@ -197,7 +197,7 @@ export default function SettingsPage() {
                 <button
                   onClick={handleVerify2FA}
                   disabled={isLoading || verificationToken.length !== 6}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                 >
                   {isLoading ? 'Verifying...' : 'Verify & Enable'}
                 </button>

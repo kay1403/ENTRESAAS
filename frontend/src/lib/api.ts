@@ -1,5 +1,4 @@
 // API Service for frontend
-// IMPORTANT: Inclure la version v1 dans l'URL de base
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 export interface ApiResponse<T> {
@@ -58,25 +57,114 @@ export interface AuditLog {
   user?: {
     email: string;
   };
-  ip: string;
-  payload: any;
+  ip?: string;
+  payload?: any;
   createdAt: string;
+}
+
+export interface LeaveBalance {
+  leaveType: { name: string; color: string };
+  totalDays: number;
+  usedDays: number;
+  pendingDays: number;
+}
+
+export interface LeaveRequest {
+  id: number;
+  leaveType: { name: string; color: string };
+  startDate: string;
+  endDate: string;
+  daysCount: number;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvedBy?: { email: string };
+}
+
+export interface TimeEntry {
+  id: number;
+  type: 'CHECK_IN' | 'CHECK_OUT';
+  timestamp: string;
+  workDate: string;
+}
+
+export interface Expense {
+  id: number;
+  category: { name: string };
+  amount: number;
+  currency: string;
+  date: string;
+  description: string;
+  status: 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'PAID';
+  receiptUrl?: string;
+}
+
+export interface Task {
+  id: number;
+  title: string;
+  description?: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  status: 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE';
+  dueDate?: string;
+  createdBy: { email: string };
+  assignments?: { user: { email: string } }[];
+}
+
+export interface Employee {
+  id: number;
+  userId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  position?: string;
+  department?: { name: string };
+  manager?: { email: string };
+  hireDate: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'ON_LEAVE' | 'TERMINATED';
+}
+
+export interface Department {
+  id: number;
+  name: string;
+  description?: string;
+  manager?: { email: string };
+  employees?: { id: number }[];
+  createdAt: string;
+}
+
+export interface Document {
+  id: number;
+  title: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  createdAt: string;
+  user?: { email: string };
+}
+
+export interface Message {
+  id: number;
+  sender: { email: string };
+  subject?: string;
+  content: string;
+  createdAt: string;
+  isRead: boolean;
 }
 
 class ApiService {
   private accessToken: string | null = null;
-  private _refreshToken: string | null = null;
+  private refreshToken: string | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
       this.accessToken = localStorage.getItem('accessToken');
-      this._refreshToken = localStorage.getItem('refreshToken');
+      this.refreshToken = localStorage.getItem('refreshToken');
     }
   }
 
   setTokens(accessToken: string, refreshToken: string) {
     this.accessToken = accessToken;
-    this._refreshToken = refreshToken;
+    this.refreshToken = refreshToken;
     if (typeof window !== 'undefined') {
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
@@ -86,7 +174,7 @@ class ApiService {
 
   clearTokens() {
     this.accessToken = null;
-    this._refreshToken = null;
+    this.refreshToken = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
@@ -112,8 +200,8 @@ class ApiService {
 
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-      throw new Error(error.message || 'API Error');
+      const error = await response.json().catch(() => ({ message: 'Erreur inconnue' }));
+      throw new Error(error.message || 'Erreur API');
     }
     return response.json();
   }
@@ -136,22 +224,6 @@ class ApiService {
     return data;
   }
 
-  async loginWith2FA(email: string, password: string, token: string) {
-    const response = await fetch(`${API_BASE_URL}/auth/login/2fa`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, token }),
-    });
-    const data = await this.handleResponse<{
-      user: User;
-      accessToken: string;
-      refreshToken: string;
-    }>(response);
-    
-    this.setTokens(data.accessToken, data.refreshToken);
-    return data;
-  }
-
   async register(email: string, password: string, roleId: number) {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
@@ -159,21 +231,6 @@ class ApiService {
       body: JSON.stringify({ email, password, roleId }),
     });
     return this.handleResponse<{ user: User }>(response);
-  }
-
-  async refreshToken() {
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: this._refreshToken }),
-    });
-    const data = await this.handleResponse<{
-      accessToken: string;
-      refreshToken: string;
-    }>(response);
-    
-    this.setTokens(data.accessToken, data.refreshToken);
-    return data;
   }
 
   async logout() {
@@ -188,13 +245,6 @@ class ApiService {
         window.location.href = '/login';
       }
     }
-  }
-
-  async getProfile() {
-    const response = await fetch(`${API_BASE_URL}/auth/profile`, {
-      headers: this.getHeaders(),
-    });
-    return this.handleResponse<User>(response);
   }
 
   // ==================== 2FA ENDPOINTS ====================
@@ -325,7 +375,7 @@ class ApiService {
     return this.handleResponse<Role>(response);
   }
 
-  async createRole(name: string, permissionIds: number[]) {
+  async createRole(name: string, permissionIds: number[] = []) {
     const response = await fetch(`${API_BASE_URL}/roles`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -402,19 +452,14 @@ class ApiService {
     return this.handleResponse<AuditLog[]>(response);
   }
 
-  async getAuditLogById(id: number) {
-    const response = await fetch(`${API_BASE_URL}/audit-log/${id}`, {
-      headers: this.getHeaders(),
-    });
-    return this.handleResponse<AuditLog>(response);
-  }
-
   // ==================== EXPORT ENDPOINTS ====================
 
   async exportUsers(format: 'excel' | 'pdf' | 'csv' = 'excel') {
     const response = await fetch(`${API_BASE_URL}/export/users/${format}`, {
       headers: this.getHeaders(),
     });
+    
+    if (!response.ok) throw new Error('Export failed');
     
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
@@ -425,24 +470,12 @@ class ApiService {
     window.URL.revokeObjectURL(url);
   }
 
-  async exportRoles(format: 'excel' | 'pdf' | 'csv' = 'excel') {
-    const response = await fetch(`${API_BASE_URL}/export/roles/${format}`, {
-      headers: this.getHeaders(),
-    });
-    
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `roles.${format}`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  }
-
   async exportAuditLogs(format: 'excel' | 'pdf' | 'csv' = 'excel') {
     const response = await fetch(`${API_BASE_URL}/export/audit-logs/${format}`, {
       headers: this.getHeaders(),
     });
+    
+    if (!response.ok) throw new Error('Export failed');
     
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
@@ -451,6 +484,255 @@ class ApiService {
     a.download = `audit-logs.${format}`;
     a.click();
     window.URL.revokeObjectURL(url);
+  }
+
+  // ==================== LEAVE MODULE ====================
+  
+  async getLeaveBalances() {
+    const response = await fetch(`${API_BASE_URL}/leave/balances`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<LeaveBalance[]>(response);
+  }
+
+  async getLeaveRequests() {
+    const response = await fetch(`${API_BASE_URL}/leave/requests`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<LeaveRequest[]>(response);
+  }
+
+  async createLeaveRequest(data: any) {
+    const response = await fetch(`${API_BASE_URL}/leave/requests`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<LeaveRequest>(response);
+  }
+
+  async approveLeaveRequest(id: number) {
+    const response = await fetch(`${API_BASE_URL}/leave/requests/${id}/approve`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<LeaveRequest>(response);
+  }
+
+  // ==================== TIME MODULE ====================
+
+  async checkIn() {
+    const response = await fetch(`${API_BASE_URL}/time/check-in`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<TimeEntry>(response);
+  }
+
+  async checkOut() {
+    const response = await fetch(`${API_BASE_URL}/time/check-out`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<TimeEntry>(response);
+  }
+
+  async getTodayTimeEntries() {
+    const response = await fetch(`${API_BASE_URL}/time/today`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ entries: TimeEntry[]; summary: any }>(response);
+  }
+
+  async getTimeHistory() {
+    const response = await fetch(`${API_BASE_URL}/time/history`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<any[]>(response);
+  }
+
+  // ==================== EXPENSE MODULE ====================
+
+  async getExpenseCategories() {
+    const response = await fetch(`${API_BASE_URL}/expense/categories`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<any[]>(response);
+  }
+
+  async createExpense(data: any) {
+    const response = await fetch(`${API_BASE_URL}/expense`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<Expense>(response);
+  }
+
+  async getMyExpenses() {
+    const response = await fetch(`${API_BASE_URL}/expense`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Expense[]>(response);
+  }
+
+  // ==================== TASK MODULE ====================
+
+  async createTask(data: any) {
+    const response = await fetch(`${API_BASE_URL}/tasks`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<Task>(response);
+  }
+
+  async getMyTasks() {
+    const response = await fetch(`${API_BASE_URL}/tasks`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Task[]>(response);
+  }
+
+  async completeTask(id: number) {
+    const response = await fetch(`${API_BASE_URL}/tasks/${id}/complete`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Task>(response);
+  }
+
+  // ==================== EMPLOYEES MODULE ====================
+
+  async getEmployees() {
+    const response = await fetch(`${API_BASE_URL}/employees`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Employee[]>(response);
+  }
+
+  async getEmployeeById(id: number) {
+    const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Employee>(response);
+  }
+
+  async createEmployee(data: any) {
+    const response = await fetch(`${API_BASE_URL}/employees`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<Employee>(response);
+  }
+
+  async updateEmployee(id: number, data: any) {
+    const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<Employee>(response);
+  }
+
+  // ==================== DEPARTMENTS MODULE ====================
+
+  async getDepartments() {
+    const response = await fetch(`${API_BASE_URL}/departments`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Department[]>(response);
+  }
+
+  async getDepartmentById(id: number) {
+    const response = await fetch(`${API_BASE_URL}/departments/${id}`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Department>(response);
+  }
+
+  async createDepartment(data: any) {
+    const response = await fetch(`${API_BASE_URL}/departments`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<Department>(response);
+  }
+
+  async updateDepartment(id: number, data: any) {
+    const response = await fetch(`${API_BASE_URL}/departments/${id}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<Department>(response);
+  }
+
+  async deleteDepartment(id: number) {
+    const response = await fetch(`${API_BASE_URL}/departments/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
+  // ==================== DOCUMENTS MODULE ====================
+
+  async getDocuments() {
+    const response = await fetch(`${API_BASE_URL}/documents`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Document[]>(response);
+  }
+
+  async uploadDocument(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(`${API_BASE_URL}/documents/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.accessToken}`,
+      },
+      body: formData,
+    });
+    return this.handleResponse<Document>(response);
+  }
+
+  async deleteDocument(id: number) {
+    const response = await fetch(`${API_BASE_URL}/documents/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
+  // ==================== MESSAGES MODULE ====================
+
+  async getMessages() {
+    const response = await fetch(`${API_BASE_URL}/messages`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Message[]>(response);
+  }
+
+  async sendMessage(data: any) {
+    const response = await fetch(`${API_BASE_URL}/messages`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<Message>(response);
+  }
+
+  async markMessageAsRead(id: number) {
+    const response = await fetch(`${API_BASE_URL}/messages/${id}/read`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<Message>(response);
   }
 }
 

@@ -83,7 +83,7 @@ export default function UsersPage() {
           <div className="flex gap-3">
             <Link
               href="/users/new"
-              className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               <Plus className="h-5 w-5 mr-2" />
               Add User
@@ -102,7 +102,7 @@ export default function UsersPage() {
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {isLoading ? (
             <div className="text-center py-12">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary-600 border-r-transparent"></div>
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
               <p className="mt-4 text-gray-600">Loading users...</p>
             </div>
           ) : users.length === 0 ? (
@@ -142,14 +142,14 @@ export default function UsersPage() {
                         <div className="flex space-x-2">
                           <Link
                             href={`/users/${u.id}`}
-                            className="p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded-md"
+                            className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-md"
                             title="View details"
                           >
                             <Eye className="h-4 w-4" />
                           </Link>
                           <Link
                             href={`/users/${u.id}/edit`}
-                            className="p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded-md"
+                            className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-md"
                             title="Edit user"
                           >
                             <Edit className="h-4 w-4" />

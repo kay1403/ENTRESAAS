@@ -103,7 +103,7 @@ export default function PermissionsPage() {
               resetForm();
               setShowModal(true);
             }}
-            className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-600"
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
           >
             <Plus className="h-5 w-5 mr-2" />
             New Permission
@@ -113,7 +113,7 @@ export default function PermissionsPage() {
         {/* Permissions Grid */}
         {isLoading ? (
           <div className="text-center py-12">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary-600 border-r-transparent"></div>
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
             <p className="mt-4 text-gray-600">Loading permissions...</p>
           </div>
         ) : permissions.length === 0 ? (
@@ -126,7 +126,7 @@ export default function PermissionsPage() {
                 resetForm();
                 setShowModal(true);
               }}
-              className="mt-4 inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+              className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               <Plus className="h-5 w-5 mr-2" />
               Create Permission
@@ -149,7 +149,7 @@ export default function PermissionsPage() {
                   <div className="flex space-x-2 ml-4">
                     <button
                       onClick={() => handleEdit(permission)}
-                      className="p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded-md"
+                      className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-md"
                       title="Edit permission"
                     >
                       <Edit className="h-4 w-4" />
@@ -186,7 +186,7 @@ export default function PermissionsPage() {
                   id="name"
                   value={permissionName}
                   onChange={(e) => setPermissionName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-primary-600 text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-gray-900"
                   placeholder="e.g., users:read, roles:write"
                   autoFocus
                 />
@@ -198,13 +198,13 @@ export default function PermissionsPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-600"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-600"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600"
                 >
                   {editingPermission ? 'Update' : 'Create'}
                 </button>

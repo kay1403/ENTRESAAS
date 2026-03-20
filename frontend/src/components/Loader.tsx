@@ -16,7 +16,7 @@ export default function Loader({ size = 'md', fullScreen = false, text }: Loader
   const loader = (
     <div className="flex flex-col items-center justify-center gap-3">
       <div
-        className={`${sizeClasses[size]} animate-spin rounded-full border-solid border-primary-600 border-r-transparent dark:border-primary-400`}
+        className={`${sizeClasses[size]} animate-spin rounded-full border-solid border-blue-600 border-r-transparent dark:border-primary-400`}
         role="status"
       />
       {text && <p className="text-sm text-gray-600 dark:text-gray-400 animate-pulse">{text}</p>}

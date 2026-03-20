@@ -17,7 +17,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
     <nav className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
       <Link
         href="/dashboard"
-        className="flex items-center hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        className="flex items-center hover:text-blue-600 dark:hover:text-primary-400 transition-colors"
       >
         <Home className="h-4 w-4" />
       </Link>
@@ -32,7 +32,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
           ) : (
             <Link
               href={item.href}
-              className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              className="hover:text-blue-600 dark:hover:text-primary-400 transition-colors"
             >
               {item.label}
             </Link>

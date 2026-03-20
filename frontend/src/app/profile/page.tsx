@@ -90,14 +90,14 @@ export default function ProfilePage() {
         <div className="px-4 py-6 sm:px-0">
           <div className="bg-white shadow overflow-hidden sm:rounded-lg">
             {/* Profile Header */}
-            <div className="px-4 py-5 sm:px-6 bg-gradient-to-r from-primary-600 to-primary-800">
+            <div className="px-4 py-5 sm:px-6 bg-gradient-to-r from-blue-600 to-blue-800">
               <div className="flex items-center space-x-4">
                 <div className="h-16 w-16 rounded-full bg-white flex items-center justify-center">
-                  <User className="h-8 w-8 text-primary-600" />
+                  <User className="h-8 w-8 text-blue-600" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-white">{user.email}</h2>
-                  <p className="text-primary-100">Role ID: {user.roleId}</p>
+                  <p className="text-blue-100">Role ID: {user.roleId}</p>
                 </div>
               </div>
             </div>
@@ -141,7 +141,7 @@ export default function ProfilePage() {
                   <div className="flex space-x-3">
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                     >
                       Edit Profile
                     </button>
@@ -162,7 +162,7 @@ export default function ProfilePage() {
                     <input
                       {...register('email')}
                       type="email"
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                     {errors.email && (
                       <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
@@ -180,7 +180,7 @@ export default function ProfilePage() {
                         <input
                           {...register('currentPassword')}
                           type="password"
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
 
@@ -191,7 +191,7 @@ export default function ProfilePage() {
                         <input
                           {...register('newPassword')}
                           type="password"
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                         />
                         {errors.newPassword && (
                           <p className="text-red-500 text-xs mt-1">{errors.newPassword.message}</p>
@@ -205,7 +205,7 @@ export default function ProfilePage() {
                         <input
                           {...register('confirmPassword')}
                           type="password"
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                         />
                         {errors.confirmPassword && (
                           <p className="text-red-500 text-xs mt-1">{errors.confirmPassword.message}</p>
@@ -218,7 +218,7 @@ export default function ProfilePage() {
                     <button
                       type="submit"
                       disabled={isLoading}
-                      className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                     >
                       {isLoading ? 'Saving...' : 'Save Changes'}
                     </button>

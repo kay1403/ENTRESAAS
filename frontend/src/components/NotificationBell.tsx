@@ -138,7 +138,7 @@ export default function NotificationBell() {
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 transition-colors"
+                className="text-sm text-blue-600 hover:text-blue-700 dark:text-primary-400 transition-colors"
               >
                 Mark all as read
               </button>
@@ -178,7 +178,7 @@ export default function NotificationBell() {
                         {!notification.read && (
                           <button
                             onClick={() => markAsRead(notification.id)}
-                            className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 transition-colors"
+                            className="text-xs text-blue-600 hover:text-blue-700 dark:text-primary-400 transition-colors"
                           >
                             Mark as read
                           </button>
@@ -200,7 +200,7 @@ export default function NotificationBell() {
           <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
             <button
               onClick={() => {/* Navigate to notifications page */}}
-              className="w-full text-center text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 transition-colors"
+              className="w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-primary-400 transition-colors"
             >
               View all notifications
             </button>
