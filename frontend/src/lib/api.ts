@@ -35,6 +35,10 @@ export interface User {
   roleName?: string;
   isActive: boolean;
   createdAt: string;
+  employeeInfo?: {
+    firstName: string;
+    lastName: string;
+  };
 }
 
 export interface Role {
@@ -333,6 +337,31 @@ class ApiService {
     return this.handleResponse<User>(response);
   }
 
+  async getProfile() {
+    const response = await fetch(`${API_BASE_URL}/users/me`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<User>(response);
+  }
+
+  async updateEmployeeInfo(data: { firstName?: string; lastName?: string }) {
+    const response = await fetch(`${API_BASE_URL}/employees/me`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<Employee>(response);
+  }
+
+  async changePassword(data: { currentPassword: string; newPassword: string }) {
+    const response = await fetch(`${API_BASE_URL}/users/change-password`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<{ message: string }>(response);
+  }
+
   async createUser(userData: any) {
     const response = await fetch(`${API_BASE_URL}/users`, {
       method: 'POST',
@@ -558,6 +587,15 @@ class ApiService {
       headers: this.getHeaders(),
     });
     return this.handleResponse<any[]>(response);
+  }
+
+  async createExpenseCategory(data: { name: string }) {
+    const response = await fetch(`${API_BASE_URL}/expense/categories`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse<{ id: number; name: string }>(response);
   }
 
   async createExpense(data: any) {

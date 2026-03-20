@@ -19,8 +19,16 @@ export default function DashboardPage() {
   const { hasPermission, isAdmin, isManager, isUser } = usePermissions();
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [displayName, setDisplayName] = useState('');
 
   useEffect(() => {
+    // Charger le nom personnalisé
+    const savedName = localStorage.getItem('userDisplayName');
+    if (savedName) {
+      setDisplayName(savedName);
+    } else if (user?.email) {
+      setDisplayName(user.email.split('@')[0]);
+    }
     loadStats();
   }, []);
 
@@ -117,10 +125,10 @@ export default function DashboardPage() {
   return (
     <Layout>
       <div className="space-y-8">
-        {/* Message de bienvenue */}
+        {/* Message de bienvenue avec nom personnalisé */}
         <div className="card">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Bonjour, {user?.email} !
+            Bonjour, {displayName} !
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
             {isAdmin && "Vous avez un accès administrateur complet."}

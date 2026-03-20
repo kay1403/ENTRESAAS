@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import { Receipt, Plus, Edit, Trash2, Download, Eye } from 'lucide-react';
+import { Receipt, Plus, Edit, Trash2, Eye, PlusCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface ExpenseCategory {
@@ -31,6 +31,8 @@ export default function ExpensePage() {
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [customCategory, setCustomCategory] = useState('');
+  const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [formData, setFormData] = useState({
     categoryId: 0,
     amount: '',
@@ -60,13 +62,41 @@ export default function ExpensePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    let categoryId = formData.categoryId;
+    
+    // Si l'utilisateur a choisi "Autre" et a saisi un nom personnalisé
+    if (categoryId === -1 && customCategory.trim()) {
+      try {
+        // Créer une nouvelle catégorie
+        const newCategory = await api.createExpenseCategory({ name: customCategory.trim() });
+        categoryId = newCategory.id;
+        // Recharger les catégories
+        const updatedCategories = await api.getExpenseCategories();
+        setCategories(updatedCategories);
+        toast.success(`Catégorie "${customCategory}" créée`);
+      } catch (error) {
+        toast.error('Erreur lors de la création de la catégorie');
+        return;
+      }
+    }
+
     try {
       await api.createExpense({
         ...formData,
+        categoryId,
         amount: parseFloat(formData.amount),
       });
       toast.success('Note de frais créée');
       setShowModal(false);
+      setCustomCategory('');
+      setShowCustomCategory(false);
+      setFormData({
+        categoryId: 0,
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
+        description: '',
+      });
       loadData();
     } catch (error) {
       toast.error('Erreur lors de la création');
@@ -142,7 +172,12 @@ export default function ExpensePage() {
         {/* Bouton nouvelle note */}
         <div className="mb-6">
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setShowModal(true);
+              setShowCustomCategory(false);
+              setCustomCategory('');
+              setFormData({ ...formData, categoryId: 0 });
+            }}
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             <Plus className="h-5 w-5 mr-2" />
@@ -231,10 +266,10 @@ export default function ExpensePage() {
         </div>
       </main>
 
-      {/* Modal de création */}
+      {/* Modal de création avec catégorie personnalisable */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Nouvelle note de frais
             </h2>
@@ -246,7 +281,12 @@ export default function ExpensePage() {
                   </label>
                   <select
                     value={formData.categoryId}
-                    onChange={(e) => setFormData({ ...formData, categoryId: Number(e.target.value) })}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setFormData({ ...formData, categoryId: val });
+                      setShowCustomCategory(val === -1);
+                      if (val !== -1) setCustomCategory('');
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     required
                   >
@@ -254,8 +294,31 @@ export default function ExpensePage() {
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
+                    <option value="-1">+ Autre (créer une nouvelle catégorie)</option>
                   </select>
                 </div>
+
+                {showCustomCategory && (
+                  <div className="animate-slideIn">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Nouvelle catégorie
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={customCategory}
+                        onChange={(e) => setCustomCategory(e.target.value)}
+                        placeholder="Ex: Fournitures, Formation, Restaurant, Taxi..."
+                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        required
+                      />
+                      <PlusCircle className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Cette catégorie sera ajoutée à votre liste
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -302,7 +365,11 @@ export default function ExpensePage() {
               <div className="mt-6 flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setCustomCategory('');
+                    setShowCustomCategory(false);
+                  }}
                   className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Annuler

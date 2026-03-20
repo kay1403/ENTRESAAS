@@ -104,3 +104,14 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+interface User {
+  id: number;
+  email: string;
+  roleId: number;
+  isActive: boolean;
+  employeeInfo?: {
+    firstName: string;
+    lastName: string;
+  };
+}

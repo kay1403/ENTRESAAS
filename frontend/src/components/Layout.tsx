@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
@@ -9,11 +9,10 @@ import ThemeToggle from './ThemeToggle';
 import { 
   Home, Users, Shield, Key, FileText, Calendar, Clock, 
   Receipt, CheckSquare, MessageSquare, FolderTree, User, 
-  Settings, LogOut, Briefcase, File, Bell
+  Settings, LogOut, Briefcase, File, Bell, Menu, X
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import { api } from '@/lib/api';
-import toast from 'react-hot-toast';
 
 interface LayoutProps {
   children: ReactNode;
@@ -24,10 +23,25 @@ export default function Layout({ children, showSidebar = true }: LayoutProps) {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const { hasPermission, roleId } = usePermissions();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [displayName, setDisplayName] = useState('');
+
+  useEffect(() => {
+    // Charger le nom personnalisé depuis localStorage
+    const savedName = localStorage.getItem('userDisplayName');
+    if (savedName) {
+      setDisplayName(savedName);
+    } else if (user?.email) {
+      // Par défaut, utiliser la partie avant @ de l'email
+      const defaultName = user.email.split('@')[0];
+      setDisplayName(defaultName);
+      localStorage.setItem('userDisplayName', defaultName);
+    }
+  }, [user]);
 
   const handleLogout = async () => {
     try {
-      await api.logout(); // CORRIGÉ : utilise api.logout() au lieu de fetch direct
+      await api.logout();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -38,7 +52,6 @@ export default function Layout({ children, showSidebar = true }: LayoutProps) {
 
   const isAdmin = roleId === 1;
   const isManager = roleId === 2;
-  const isUser = roleId === 3;
 
   // Menu items avec permissions
   const menuItems = [
@@ -83,7 +96,7 @@ export default function Layout({ children, showSidebar = true }: LayoutProps) {
     .filter(section => section.items.length > 0);
 
   if (!user) {
-    return null; // Ne pas afficher le layout si non connecté
+    return null;
   }
 
   return (
@@ -93,6 +106,16 @@ export default function Layout({ children, showSidebar = true }: LayoutProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
+              {/* Bouton hamburger - visible sur tous les écrans */}
+              {showSidebar && (
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="mr-4 p-2 rounded-md text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  aria-label="Menu"
+                >
+                  {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                </button>
+              )}
               <Link href="/dashboard" className="text-xl font-bold text-gray-900 dark:text-white">
                 ENTRESAAS
               </Link>
@@ -104,7 +127,9 @@ export default function Layout({ children, showSidebar = true }: LayoutProps) {
             <div className="flex items-center space-x-4">
               <NotificationBell />
               <ThemeToggle />
-              <span className="text-sm text-gray-700 dark:text-gray-300">{user?.email}</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300 hidden sm:block">
+                {displayName}
+              </span>
               <button
                 onClick={handleLogout}
                 className="p-2 rounded-md text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -118,9 +143,13 @@ export default function Layout({ children, showSidebar = true }: LayoutProps) {
       </nav>
 
       <div className="flex">
-        {/* Sidebar gauche */}
+        {/* Sidebar - avec animation de slide */}
         {showSidebar && (
-          <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 min-h-[calc(100vh-4rem)] sticky left-0 top-16 overflow-y-auto">
+          <aside 
+            className={`fixed lg:relative bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 h-[calc(100vh-4rem)] overflow-y-auto transition-all duration-300 z-40 ${
+              sidebarOpen ? 'w-64 left-0' : 'w-0 -left-64 lg:left-0 overflow-hidden'
+            }`}
+          >
             <nav className="p-4 space-y-6">
               {filteredMenu.map((section, idx) => (
                 <div key={idx}>
@@ -145,8 +174,16 @@ export default function Layout({ children, showSidebar = true }: LayoutProps) {
           </aside>
         )}
 
-        {/* Contenu principal */}
-        <main className={`flex-1 ${showSidebar ? 'p-8' : 'p-0'}`}>
+        {/* Overlay pour mobile quand sidebar est ouverte */}
+        {showSidebar && sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Contenu principal - s'étend quand sidebar est fermée */}
+        <main className={`flex-1 transition-all duration-300 ${showSidebar ? 'p-4 sm:p-8' : 'p-0'}`}>
           {children}
         </main>
       </div>
